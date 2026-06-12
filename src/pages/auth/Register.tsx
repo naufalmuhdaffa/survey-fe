@@ -20,7 +20,11 @@ const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
 ).replace(/\/$/, "");
 
+const AUTH_SESSION_KEY = "survey_auth_session";
+const AUTH_TOKEN_KEY = "survey_auth_token";
+
 type RegisterProps = {
+  onRegisterSuccess?: () => void;
   onSwitchToLogin?: () => void;
 };
 
@@ -90,6 +94,20 @@ const getApiMessage = async (response: Response) => {
 };
 
 const getToken = (result: ApiResult) => result.token ?? result.data?.token;
+
+const persistAuthSession = (result: ApiResult) => {
+  localStorage.removeItem(AUTH_SESSION_KEY);
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  sessionStorage.setItem(AUTH_SESSION_KEY, "1");
+
+  const token = getToken(result);
+
+  if (token) {
+    sessionStorage.setItem(AUTH_TOKEN_KEY, token);
+  } else {
+    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+  }
+};
 
 const getPositionLabel = (position: string) => {
   const positionLabels: Record<string, string> = {
@@ -175,7 +193,10 @@ const RegisterField = ({
   );
 };
 
-export const Register = ({ onSwitchToLogin }: RegisterProps) => {
+export const Register = ({
+  onRegisterSuccess,
+  onSwitchToLogin,
+}: RegisterProps) => {
   const [form, setForm] = useState<RegisterForm>(initialForm);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -332,6 +353,17 @@ export const Register = ({ onSwitchToLogin }: RegisterProps) => {
       return "Username maksimal 25 karakter.";
     }
 
+    if (
+      form.email.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
+    ) {
+      return "Format email tidak valid.";
+    }
+
+    if (form.phone.trim() && !/^\+?[0-9]{8,15}$/.test(form.phone.trim())) {
+      return "Format nomor telepon tidak valid.";
+    }
+
     if (form.password.length < 8) {
       return "Kata sandi minimal 8 karakter.";
     }
@@ -394,16 +426,8 @@ export const Register = ({ onSwitchToLogin }: RegisterProps) => {
       }
 
       const result = (await response.json()) as ApiResult;
-      const token = getToken(result);
-
-      if (token) {
-        sessionStorage.setItem("survey_auth_token", token);
-      }
-
-      setFeedback({
-        message: result.message ?? "Registrasi berhasil.",
-        type: "success",
-      });
+      persistAuthSession(result);
+      onRegisterSuccess?.();
     } catch (error) {
       setFeedback({
         message:
