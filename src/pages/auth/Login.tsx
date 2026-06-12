@@ -10,7 +10,11 @@ const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
 ).replace(/\/$/, "");
 
+const AUTH_SESSION_KEY = "survey_auth_session";
+const AUTH_TOKEN_KEY = "survey_auth_token";
+
 type LoginProps = {
+  onLoginSuccess?: () => void;
   onSwitchToRegister?: () => void;
 };
 
@@ -33,7 +37,23 @@ const getApiMessage = async (response: Response) => {
 
 const getToken = (result: ApiResult) => result.token ?? result.data?.token;
 
-export const Login = ({ onSwitchToRegister }: LoginProps) => {
+const persistAuthSession = (result: ApiResult, rememberMe: boolean) => {
+  localStorage.removeItem(AUTH_SESSION_KEY);
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  sessionStorage.removeItem(AUTH_SESSION_KEY);
+  sessionStorage.removeItem(AUTH_TOKEN_KEY);
+
+  const storage = rememberMe ? localStorage : sessionStorage;
+  const token = getToken(result);
+
+  storage.setItem(AUTH_SESSION_KEY, "1");
+
+  if (token) {
+    storage.setItem(AUTH_TOKEN_KEY, token);
+  }
+};
+
+export const Login = ({ onLoginSuccess, onSwitchToRegister }: LoginProps) => {
   const [identity, setIdentity] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -79,17 +99,13 @@ export const Login = ({ onSwitchToRegister }: LoginProps) => {
       }
 
       const result = (await response.json()) as ApiResult;
-      const token = getToken(result);
-
-      if (token) {
-        const storage = rememberMe ? localStorage : sessionStorage;
-        storage.setItem("survey_auth_token", token);
-      }
+      persistAuthSession(result, rememberMe);
 
       setFeedback({
         message: result.message ?? "Login berhasil.",
         type: "success",
       });
+      onLoginSuccess?.();
     } catch (error) {
       setFeedback({
         message:
