@@ -298,6 +298,60 @@
     }
   }
 
+  .register-field__control--with-action {
+    input {
+      padding-right: 8px;
+    }
+  }
+
+  .register-field__control--error {
+    border-color: var(--register-primary-dark);
+    box-shadow: 0 0 0 2px rgba(128, 0, 0, 0.08);
+  }
+
+  .register-field__action {
+    background: var(--register-primary);
+    border: 0;
+    border-radius: 6px;
+    color: #ffffff;
+    cursor: pointer;
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 16px;
+    margin-right: 8px;
+    min-width: 56px;
+    padding: 7px 10px;
+    white-space: nowrap;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--register-primary-dark);
+      outline: none;
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.62;
+    }
+  }
+
+  .register-field__action--success {
+    background: #0b6b45;
+    min-width: 96px;
+
+    &:hover,
+    &:focus-visible {
+      background: #095638;
+    }
+  }
+
+  .register-field__error {
+    color: var(--register-primary-dark);
+    font-size: 13px;
+    line-height: 18px;
+  }
+
   .register-field__control--textarea {
     background: var(--register-input-muted);
     align-items: stretch;
@@ -450,6 +504,168 @@
     }
   }
 
+  .register-modal {
+    align-items: center;
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    padding: 20px;
+    position: fixed;
+    z-index: 50;
+  }
+
+  .register-modal__backdrop {
+    background: rgba(11, 28, 48, 0.42);
+    border: 0;
+    cursor: pointer;
+    inset: 0;
+    padding: 0;
+    position: absolute;
+  }
+
+  .register-modal__panel {
+    background: #ffffff;
+    border: 1px solid var(--register-border);
+    border-radius: 8px;
+    box-shadow:
+      0 24px 48px rgba(11, 28, 48, 0.18),
+      0 8px 16px rgba(11, 28, 48, 0.12);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 420px;
+    padding: 24px;
+    position: relative;
+    width: min(100%, 420px);
+    z-index: 1;
+
+    h2 {
+      color: var(--register-text);
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 28px;
+      margin-bottom: 4px;
+    }
+
+    p {
+      color: var(--register-muted);
+      font-size: 14px;
+      line-height: 20px;
+    }
+  }
+
+  .register-modal__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    span {
+      color: var(--register-text);
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 20px;
+    }
+
+    input {
+      background: var(--register-page);
+      border: 1px solid var(--register-border);
+      border-radius: 8px;
+      color: var(--register-muted);
+      font-size: 20px;
+      letter-spacing: 0;
+      line-height: 28px;
+      outline: 0;
+      padding: 12px 14px;
+      text-align: center;
+      width: 100%;
+
+      &:focus {
+        border-color: var(--register-primary);
+        box-shadow: 0 0 0 3px rgba(128, 0, 0, 0.12);
+      }
+    }
+  }
+
+  .register-modal__message {
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .register-modal__message--info {
+    background: #fff8ec;
+    color: #7a4b00;
+  }
+
+  .register-modal__message--success {
+    background: #edfdf5;
+    color: #0b6b45;
+  }
+
+  .register-modal__message--error {
+    background: #fff1f1;
+    color: var(--register-primary-dark);
+  }
+
+  .register-modal__actions {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 1fr 1fr;
+
+    button {
+      background: #ffffff;
+      border: 1px solid var(--register-border);
+      border-radius: 8px;
+      color: var(--register-primary-dark);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 20px;
+      padding: 10px 12px;
+
+      &:hover,
+      &:focus-visible {
+        background: rgba(226, 191, 185, 0.16);
+        outline: none;
+      }
+
+      &:disabled {
+        cursor: not-allowed;
+        opacity: 0.62;
+      }
+    }
+
+    .register-modal__primary {
+      background: var(--register-primary);
+      border-color: var(--register-primary);
+      color: #ffffff;
+
+      &:hover,
+      &:focus-visible {
+        background: var(--register-primary-dark);
+      }
+    }
+  }
+
+  .register-modal__close {
+    align-self: center;
+    background: transparent;
+    border: 0;
+    color: var(--register-muted);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+    padding: 0;
+
+    &:hover,
+    &:focus-visible {
+      color: var(--register-primary-dark);
+      outline: none;
+      text-decoration: underline;
+      text-underline-offset: 4px;
+    }
+  }
+
   @media (max-width: 1024px) {
     flex-direction: column;
 
@@ -481,6 +697,10 @@
     }
 
     .register-field-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .register-modal__actions {
       grid-template-columns: 1fr;
     }
   }
