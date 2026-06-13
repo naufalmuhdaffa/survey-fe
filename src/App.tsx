@@ -3,8 +3,9 @@ import "./App.css";
 import { Login } from "./pages/auth/Login";
 import { Register } from "./pages/auth/Register";
 import { Home } from "./pages/home/Home";
+import { Profile } from "./pages/profile/Profile";
 
-type AuthPage = "home" | "login" | "register";
+type AuthPage = "home" | "login" | "profile" | "register";
 
 const AUTH_SESSION_KEY = "survey_auth_session";
 const AUTH_TOKEN_KEY = "survey_auth_token";
@@ -23,7 +24,21 @@ function App() {
   );
 
   if (authPage === "home") {
-    return <Home onLogout={() => setAuthPage("login")} />;
+    return (
+      <Home
+        onLogout={() => setAuthPage("login")}
+        onOpenProfile={() => setAuthPage("profile")}
+      />
+    );
+  }
+
+  if (authPage === "profile") {
+    return (
+      <Profile
+        onBackHome={() => setAuthPage("home")}
+        onLogout={() => setAuthPage("login")}
+      />
+    );
   }
 
   return (
