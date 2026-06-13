@@ -28,6 +28,7 @@ const AUTH_TOKEN_KEY = "survey_auth_token";
 
 type HomeProps = {
   onLogout?: () => void;
+  onOpenProfile?: () => void;
 };
 
 type SurveyApiItem = {
@@ -251,7 +252,7 @@ const clearAuthSession = () => {
   sessionStorage.removeItem(AUTH_TOKEN_KEY);
 };
 
-export const Home = ({ onLogout }: HomeProps) => {
+export const Home = ({ onLogout, onOpenProfile }: HomeProps) => {
   const [surveys, setSurveys] = useState<SurveyCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -324,6 +325,11 @@ export const Home = ({ onLogout }: HomeProps) => {
     void handleLogout();
   };
 
+  const handleProfileClick = () => {
+    closeSidebar();
+    onOpenProfile?.();
+  };
+
   return (
     <main className="home-page">
       <header className="home-topbar">
@@ -341,9 +347,9 @@ export const Home = ({ onLogout }: HomeProps) => {
         </button>
         <strong>Survey Pemkot Jogja</strong>
         <button
-          aria-label="Logout"
+          aria-label="Buka profil"
           className="home-topbar__profile"
-          onClick={handleLogoutClick}
+          onClick={handleProfileClick}
           type="button"
         >
           <img src={adminAvatar} alt="" aria-hidden="true" />
