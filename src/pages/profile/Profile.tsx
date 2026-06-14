@@ -418,7 +418,6 @@ export const Profile = ({
   };
 
   const identityName = displayValue(profile?.full_name);
-  const identityEmail = displayValue(profile?.email ?? profile?.username);
   const positionLabel = formatPosition(profile?.position ?? "");
   const roleLabel = formatRole(profile?.role ?? "user");
 
@@ -489,7 +488,6 @@ export const Profile = ({
 
                 <div className="profile-overview__identity">
                   <h2>{isLoadingProfile ? "Memuat profil..." : identityName}</h2>
-                  <p>{isLoadingProfile ? "Mohon tunggu sebentar" : identityEmail}</p>
                   <div className="profile-badges" aria-label="Status akun">
                     <span className="profile-badge profile-badge--citizen">
                       <img src={badgeCheckIcon} alt="" aria-hidden="true" />
