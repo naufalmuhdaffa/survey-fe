@@ -1,13 +1,6 @@
 import { useState } from "react";
-import helpIcon from "../../assets/home/home-help.svg";
-import logoutIcon from "../../assets/home/home-logout.svg";
-import accessIcon from "../../assets/home/home-nav-access.svg";
-import analyticsIcon from "../../assets/home/home-nav-analytics.svg";
-import dashboardIcon from "../../assets/home/home-nav-dashboard.svg";
-import historyIcon from "../../assets/home/home-nav-history.svg";
-import listIcon from "../../assets/home/home-nav-list.svg";
-import manageIcon from "../../assets/home/home-nav-manage.svg";
-import usersIcon from "../../assets/home/home-nav-users.svg";
+import { Sidebar } from "../../components/sidebar";
+import { Topbar } from "../../components/topbar";
 import badgeCheckIcon from "../../assets/profile/profile-badge-check.svg";
 import breadcrumbChevronIcon from "../../assets/profile/profile-breadcrumb-chevron.svg";
 import cameraIcon from "../../assets/profile/profile-camera.svg";
@@ -17,21 +10,10 @@ import lockIcon from "../../assets/profile/profile-lock.svg";
 import profileAvatar from "../../assets/profile/profile-avatar.jpg";
 import "../../styles/profile/Profile.scss";
 
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
-).replace(/\/$/, "");
-
-const AUTH_SESSION_KEY = "survey_auth_session";
-const AUTH_TOKEN_KEY = "survey_auth_token";
-
 type ProfileProps = {
+  isAuthenticated: boolean;
+  onAuthAction?: () => void;
   onBackHome?: () => void;
-  onLogout?: () => void;
-};
-
-type NavigationItem = {
-  icon: string;
-  label: string;
 };
 
 type ProfileField = {
@@ -39,16 +21,6 @@ type ProfileField = {
   label: string;
   value: string;
 };
-
-const navigationItems: NavigationItem[] = [
-  { icon: dashboardIcon, label: "Dashboard" },
-  { icon: listIcon, label: "Daftar Survey" },
-  { icon: manageIcon, label: "Kelola Survey" },
-  { icon: usersIcon, label: "User Management" },
-  { icon: accessIcon, label: "Pengaturan Hak Akses" },
-  { icon: analyticsIcon, label: "Analytics" },
-  { icon: historyIcon, label: "History" },
-];
 
 const profileFields: ProfileField[] = [
   { label: "Nama Lengkap", value: "Budi Santoso" },
@@ -71,14 +43,11 @@ const profileFields: ProfileField[] = [
   },
 ];
 
-const clearAuthSession = () => {
-  localStorage.removeItem(AUTH_SESSION_KEY);
-  localStorage.removeItem(AUTH_TOKEN_KEY);
-  sessionStorage.removeItem(AUTH_SESSION_KEY);
-  sessionStorage.removeItem(AUTH_TOKEN_KEY);
-};
-
-export const Profile = ({ onBackHome, onLogout }: ProfileProps) => {
+export const Profile = ({
+  isAuthenticated,
+  onAuthAction,
+  onBackHome,
+}: ProfileProps) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const closeSidebar = () => {
@@ -102,93 +71,30 @@ export const Profile = ({ onBackHome, onLogout }: ProfileProps) => {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await fetch(`${API_BASE_URL}/auth/logout`, {
-        credentials: "include",
-        method: "POST",
-      });
-    } finally {
-      clearAuthSession();
-      closeSidebar();
-      onLogout?.();
-    }
-  };
-
-  const handleLogoutClick = () => {
-    void handleLogout();
+  const handleAuthAction = () => {
+    closeSidebar();
+    onAuthAction?.();
   };
 
   return (
     <main className="profile-page">
-      <header className="profile-topbar">
-        <button
-          aria-controls="profile-sidebar"
-          aria-expanded={isSidebarOpen}
-          aria-label={isSidebarOpen ? "Tutup menu" : "Buka menu"}
-          className="profile-topbar__menu"
-          onClick={toggleSidebar}
-          type="button"
-        >
-          <span />
-          <span />
-          <span />
-        </button>
-        <strong>Survey PemKot Jogja</strong>
-        <div className="profile-topbar__avatar" aria-hidden="true">
-          <img src={profileAvatar} alt="" aria-hidden="true" />
-        </div>
-      </header>
-
-      <button
-        aria-hidden={!isSidebarOpen}
-        className={`profile-sidebar-backdrop ${
-          isSidebarOpen ? "is-visible" : ""
-        }`}
-        onClick={closeSidebar}
-        tabIndex={isSidebarOpen ? 0 : -1}
-        type="button"
+      <Topbar
+        avatarSrc={profileAvatar}
+        isSidebarOpen={isSidebarOpen}
+        onProfileClick={closeSidebar}
+        onToggleSidebar={toggleSidebar}
+        sidebarId="profile-sidebar"
       />
 
-      <aside
-        aria-label="Navigasi utama"
-        className={`profile-sidebar ${isSidebarOpen ? "is-open" : ""}`}
+      <Sidebar
+        avatarSrc={profileAvatar}
         id="profile-sidebar"
-      >
-        <div>
-          <div className="profile-sidebar__account">
-            <img src={profileAvatar} alt="" aria-hidden="true" />
-            <div>
-              <strong>Admin Portal</strong>
-              <small>Survey Jogja Official</small>
-            </div>
-          </div>
-
-          <nav className="profile-navigation" aria-label="Menu dashboard">
-            {navigationItems.map((item) => (
-              <button
-                key={item.label}
-                onClick={() => handleNavigationClick(item.label)}
-                type="button"
-              >
-                <img src={item.icon} alt="" aria-hidden="true" />
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        <div className="profile-sidebar__footer">
-          <button type="button">
-            <img src={helpIcon} alt="" aria-hidden="true" />
-            <span>Help Center</span>
-          </button>
-          <button onClick={handleLogoutClick} type="button">
-            <img src={logoutIcon} alt="" aria-hidden="true" />
-            <span>Logout</span>
-          </button>
-        </div>
-      </aside>
+        isAuthenticated={isAuthenticated}
+        isOpen={isSidebarOpen}
+        onAuthAction={handleAuthAction}
+        onClose={closeSidebar}
+        onNavigate={handleNavigationClick}
+      />
 
       <section className="profile-shell">
         <div className="profile-content">
