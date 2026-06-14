@@ -14,6 +14,7 @@ const AUTH_SESSION_KEY = "survey_auth_session";
 const AUTH_TOKEN_KEY = "survey_auth_token";
 
 type LoginProps = {
+  onForgotPassword?: () => void;
   onLoginSuccess?: () => void;
   onSwitchToRegister?: () => void;
 };
@@ -53,7 +54,11 @@ const persistAuthSession = (result: ApiResult, rememberMe: boolean) => {
   }
 };
 
-export const Login = ({ onLoginSuccess, onSwitchToRegister }: LoginProps) => {
+export const Login = ({
+  onForgotPassword,
+  onLoginSuccess,
+  onSwitchToRegister,
+}: LoginProps) => {
   const [identity, setIdentity] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -191,7 +196,9 @@ export const Login = ({ onLoginSuccess, onSwitchToRegister }: LoginProps) => {
                 />
                 <span>Ingat Saya</span>
               </label>
-              <button type="button">Lupa Kata Sandi?</button>
+              <button onClick={onForgotPassword} type="button">
+                Lupa Kata Sandi?
+              </button>
             </div>
 
             {feedback && (
