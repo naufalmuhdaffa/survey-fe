@@ -554,6 +554,24 @@
     }
   }
 
+  .register-modal__panel--legal {
+    max-width: 520px;
+    width: min(100%, 520px);
+  }
+
+  .register-legal-list {
+    color: var(--register-muted);
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding-left: 20px;
+
+    li {
+      font-size: 14px;
+      line-height: 20px;
+    }
+  }
+
   .register-modal__field {
     display: flex;
     flex-direction: column;
@@ -643,6 +661,26 @@
       &:focus-visible {
         background: var(--register-primary-dark);
       }
+    }
+  }
+
+  .register-modal__standalone {
+    align-self: stretch;
+    background: var(--register-primary);
+    border: 1px solid var(--register-primary);
+    border-radius: 8px;
+    color: #ffffff;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 20px;
+    padding: 10px 12px;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--register-primary-dark);
+      border-color: var(--register-primary-dark);
+      outline: none;
     }
   }
 

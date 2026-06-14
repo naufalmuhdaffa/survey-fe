@@ -43,6 +43,7 @@ type RegisterForm = {
 
 type RegisterFieldName = keyof RegisterForm | "terms";
 type RegisterFieldErrors = Partial<Record<RegisterFieldName, string>>;
+type LegalDocument = "privacy" | "terms";
 
 type RegisterFieldAction = {
   disabled?: boolean;
@@ -103,6 +104,11 @@ type ContactVerificationModalProps = {
   onCodeChange: (value: string) => void;
   onResend: () => void;
   onVerify: () => void;
+};
+
+type LegalInfoModalProps = {
+  document: LegalDocument;
+  onClose: () => void;
 };
 
 type ApiResult = {
@@ -236,6 +242,90 @@ const validateRequiredPhone = (phone: string) => {
   }
 
   return normalizePhone(phone).error;
+};
+
+const validateRegisterField = (
+  field: RegisterFieldName,
+  values: RegisterForm,
+  acceptedTerms: boolean,
+) => {
+  const nik = values.nik.trim();
+  const username = values.username.trim();
+
+  switch (field) {
+    case "nik":
+      if (!nik) {
+        return "NIK harus diisi.";
+      }
+
+      if (!/^\d{16}$/.test(nik)) {
+        return "NIK harus 16 digit angka.";
+      }
+
+      return null;
+
+    case "fullName":
+      return values.fullName.trim() ? null : "Nama lengkap harus diisi.";
+
+    case "username":
+      if (!username) {
+        return "Username wajib diisi.";
+      }
+
+      if (username.length > 25) {
+        return "Username maksimal 25 karakter.";
+      }
+
+      if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+        return "Username hanya boleh berisi huruf, angka, dan underscore.";
+      }
+
+      return null;
+
+    case "email":
+      return validateEmail(values.email);
+
+    case "phone":
+      return normalizePhone(values.phone).error;
+
+    case "password":
+      if (!values.password.trim()) {
+        return "Password harus diisi.";
+      }
+
+      if (values.password.length < 6) {
+        return "Password minimal 6 karakter.";
+      }
+
+      if (values.password.length > 255) {
+        return "Password maksimal 255 karakter.";
+      }
+
+      return null;
+
+    case "passwordConfirmation":
+      if (!values.passwordConfirmation) {
+        return null;
+      }
+
+      return values.password === values.passwordConfirmation
+        ? null
+        : "Konfirmasi kata sandi belum sama.";
+
+    case "position":
+      return values.position.trim()
+        ? null
+        : "Posisi pengguna dari data identitas tidak valid.";
+
+    case "terms":
+      return acceptedTerms ? null : "Syarat dan Ketentuan wajib disetujui.";
+
+    case "address":
+      return null;
+
+    default:
+      return null;
+  }
 };
 
 const getRemainingSeconds = (cooldownUntil: number, now: number) =>
@@ -466,6 +556,70 @@ const ContactVerificationModal = ({
   );
 };
 
+const legalDocuments: Record<
+  LegalDocument,
+  { items: string[]; title: string }
+> = {
+  privacy: {
+    title: "Kebijakan Privasi",
+    items: [
+      "Data identitas digunakan untuk kebutuhan autentikasi, verifikasi, dan pengelolaan akses survei.",
+      "NIK, nama, alamat, email, dan nomor telepon diproses sesuai kebutuhan layanan Survey Jogja.",
+      "Data tidak dibagikan kepada pihak lain di luar kebutuhan operasional layanan dan ketentuan hukum yang berlaku.",
+      "Pengguna dapat meminta pembaruan atau peninjauan data melalui kanal bantuan resmi.",
+    ],
+  },
+  terms: {
+    title: "Syarat dan Ketentuan",
+    items: [
+      "Pengguna wajib mengisi data yang benar dan dapat dipertanggungjawabkan.",
+      "Akun hanya boleh digunakan oleh pemilik identitas yang terverifikasi.",
+      "Pengguna bertanggung jawab menjaga kerahasiaan kata sandi dan akses akun.",
+      "Penyalahgunaan layanan dapat mengakibatkan pembatasan atau penonaktifan akun.",
+    ],
+  },
+};
+
+const LegalInfoModal = ({ document, onClose }: LegalInfoModalProps) => {
+  const content = legalDocuments[document];
+  const titleId = `register-${document}-title`;
+
+  return (
+    <div className="register-modal" role="presentation">
+      <button
+        aria-label={`Tutup ${content.title}`}
+        className="register-modal__backdrop"
+        onClick={onClose}
+        type="button"
+      />
+      <section
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className="register-modal__panel register-modal__panel--legal"
+        role="dialog"
+      >
+        <header>
+          <h2 id={titleId}>{content.title}</h2>
+        </header>
+
+        <ul className="register-legal-list">
+          {content.items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+
+        <button
+          className="register-modal__primary register-modal__standalone"
+          onClick={onClose}
+          type="button"
+        >
+          Mengerti
+        </button>
+      </section>
+    </div>
+  );
+};
+
 export const Register = ({
   onRegisterSuccess,
   onSwitchToLogin,
@@ -474,6 +628,8 @@ export const Register = ({
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [activeLegalDocument, setActiveLegalDocument] =
+    useState<LegalDocument | null>(null);
   const [fieldErrors, setFieldErrors] = useState<RegisterFieldErrors>({});
   const [emailVerification, setEmailVerification] =
     useState<ContactVerificationState>(initialVerificationState);
@@ -538,6 +694,23 @@ export const Register = ({
     });
   };
 
+  const setOrClearFieldError = (
+    field: RegisterFieldName,
+    message: string | null,
+  ) => {
+    setFieldErrors((current) => {
+      const nextErrors = { ...current };
+
+      if (message) {
+        nextErrors[field] = message;
+      } else {
+        delete nextErrors[field];
+      }
+
+      return nextErrors;
+    });
+  };
+
   const resetEmailVerification = () => {
     setEmailVerification(initialVerificationState);
   };
@@ -552,39 +725,41 @@ export const Register = ({
     const { name, value } = event.target;
     const fieldName = name as keyof RegisterForm;
 
-    clearFieldError(fieldName);
     setFeedback(null);
 
     if (fieldName === "nik") {
       const nextNik = value.trim();
-
-      setForm((current) => ({
-        ...current,
+      const nextForm = {
+        ...form,
         address: "",
         fullName: "",
         nik: value,
         position: "",
-      }));
+      };
+
+      setForm(nextForm);
+      setOrClearFieldError("fullName", null);
+      setOrClearFieldError("position", null);
 
       if (nextNik.length === 0) {
         setNikVerification({ message: "", status: "idle" });
+        setOrClearFieldError("nik", validateRegisterField("nik", nextForm, acceptedTerms));
         return;
       }
 
       if (nextNik.length < 16) {
-        setNikVerification({
-          message: "Masukkan 16 digit NIK untuk verifikasi otomatis.",
-          status: "idle",
-        });
+        setNikVerification({ message: "", status: "idle" });
+        setOrClearFieldError("nik", validateRegisterField("nik", nextForm, acceptedTerms));
         return;
       }
 
       if (!/^\d{16}$/.test(nextNik)) {
-        setFieldError("nik", "NIK harus berisi 16 digit angka.");
         setNikVerification({ message: "", status: "error" });
+        setOrClearFieldError("nik", validateRegisterField("nik", nextForm, acceptedTerms));
         return;
       }
 
+      setOrClearFieldError("nik", null);
       setNikVerification({
         message: "Memverifikasi NIK...",
         status: "verifying",
@@ -611,10 +786,33 @@ export const Register = ({
       }
     }
 
-    setForm((current) => ({
-      ...current,
+    const nextForm = {
+      ...form,
       [fieldName]: value,
-    }));
+    };
+
+    setForm(nextForm);
+    setOrClearFieldError(
+      fieldName,
+      validateRegisterField(fieldName, nextForm, acceptedTerms),
+    );
+
+    if (
+      fieldName === "password" &&
+      nextForm.passwordConfirmation.trim() !== ""
+    ) {
+      setOrClearFieldError(
+        "passwordConfirmation",
+        validateRegisterField("passwordConfirmation", nextForm, acceptedTerms),
+      );
+    }
+
+    if (fieldName === "passwordConfirmation") {
+      setOrClearFieldError(
+        "passwordConfirmation",
+        validateRegisterField("passwordConfirmation", nextForm, acceptedTerms),
+      );
+    }
   };
 
   useEffect(() => {
@@ -688,57 +886,35 @@ export const Register = ({
 
   const validateForm = () => {
     const errors: RegisterFieldErrors = {};
-    const nik = form.nik.trim();
-    const username = form.username.trim();
-    const emailError = validateEmail(form.email);
-    const phoneError = normalizePhone(form.phone).error;
+    const fields: RegisterFieldName[] = [
+      "nik",
+      "fullName",
+      "username",
+      "email",
+      "phone",
+      "password",
+      "passwordConfirmation",
+      "position",
+      "terms",
+    ];
 
-    if (!nik) {
-      errors.nik = "NIK harus diisi.";
-    } else if (!/^\d{16}$/.test(nik)) {
-      errors.nik = "NIK harus 16 digit angka.";
-    } else if (nikVerification.status !== "success" || !form.fullName.trim()) {
-      errors.nik = "NIK harus terverifikasi sebelum registrasi.";
-    }
+    fields.forEach((field) => {
+      const error = validateRegisterField(field, form, acceptedTerms);
 
-    if (!form.fullName.trim()) {
-      errors.fullName = "Nama lengkap harus diisi.";
-    }
-
-    if (!username) {
-      errors.username = "Username wajib diisi.";
-    } else if (username.length > 25) {
-      errors.username = "Username maksimal 25 karakter.";
-    } else if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-      errors.username = "Username hanya boleh berisi huruf, angka, dan underscore.";
-    }
-
-    if (emailError) {
-      errors.email = emailError;
-    }
-
-    if (phoneError) {
-      errors.phone = phoneError;
-    }
-
-    if (!form.password.trim()) {
-      errors.password = "Password harus diisi.";
-    } else if (form.password.length < 6) {
-      errors.password = "Password minimal 6 karakter.";
-    } else if (form.password.length > 255) {
-      errors.password = "Password maksimal 255 karakter.";
-    }
+      if (error) {
+        errors[field] = error;
+      }
+    });
 
     if (form.password !== form.passwordConfirmation) {
       errors.passwordConfirmation = "Konfirmasi kata sandi belum sama.";
     }
 
-    if (!form.position.trim()) {
-      errors.position = "Posisi pengguna dari data identitas tidak valid.";
-    }
-
-    if (!acceptedTerms) {
-      errors.terms = "Syarat dan Ketentuan wajib disetujui.";
+    if (
+      !errors.nik &&
+      (nikVerification.status !== "success" || !form.fullName.trim())
+    ) {
+      errors.nik = "NIK harus terverifikasi sebelum registrasi.";
     }
 
     return errors;
@@ -908,12 +1084,14 @@ export const Register = ({
         throw new Error(await getApiMessage(response));
       }
 
-      const result = (await response.json()) as ApiResult;
+      await response.json();
       setEmailVerification((current) => ({
         ...current,
+        code: "",
+        isOpen: false,
         isVerified: true,
         isVerifying: false,
-        message: result.message ?? "Email berhasil diverifikasi.",
+        message: "",
         type: "success",
       }));
       clearFieldError("email");
@@ -954,12 +1132,14 @@ export const Register = ({
         throw new Error(await getApiMessage(response));
       }
 
-      const result = (await response.json()) as ApiResult;
+      await response.json();
       setPhoneVerification((current) => ({
         ...current,
+        code: "",
+        isOpen: false,
         isVerified: true,
         isVerifying: false,
-        message: result.message ?? "Nomor telepon berhasil diverifikasi.",
+        message: "",
         type: "success",
       }));
       clearFieldError("phone");
@@ -1221,14 +1401,37 @@ export const Register = ({
                   id="terms"
                   onChange={(event) => {
                     setAcceptedTerms(event.target.checked);
-                    clearFieldError("terms");
+                    setOrClearFieldError(
+                      "terms",
+                      validateRegisterField("terms", form, event.target.checked),
+                    );
                   }}
                   type="checkbox"
                 />
                 <span>
-                  Saya menyetujui <button type="button">Syarat dan Ketentuan</button>{" "}
-                  serta <button type="button">Kebijakan Privasi</button> yang
-                  berlaku di ekosistem Survey Jogja.
+                  Saya menyetujui{" "}
+                  <button
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setActiveLegalDocument("terms");
+                    }}
+                    type="button"
+                  >
+                    Syarat dan Ketentuan
+                  </button>{" "}
+                  serta{" "}
+                  <button
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setActiveLegalDocument("privacy");
+                    }}
+                    type="button"
+                  >
+                    Kebijakan Privasi
+                  </button>{" "}
+                  yang berlaku di ekosistem Survey Jogja.
                 </span>
               </label>
 
@@ -1305,6 +1508,13 @@ export const Register = ({
         titleId="phone-verification-title"
         type={phoneVerification.type}
       />
+
+      {activeLegalDocument && (
+        <LegalInfoModal
+          document={activeLegalDocument}
+          onClose={() => setActiveLegalDocument(null)}
+        />
+      )}
     </main>
   );
 };
