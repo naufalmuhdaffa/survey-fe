@@ -5,9 +5,11 @@ import { Login } from "./pages/auth/Login";
 import { Register } from "./pages/auth/Register";
 import { ResetPassword } from "./pages/auth/ResetPassword";
 import { Home } from "./pages/home/Home";
+import { ChangePassword } from "./pages/profile/ChangePassword";
 import { Profile } from "./pages/profile/Profile";
 
 type AuthPage =
+  | "change-password"
   | "forgot-password"
   | "home"
   | "login"
@@ -94,6 +96,12 @@ function App() {
     setAuthPage("home");
   };
 
+  const handleUnauthorized = () => {
+    clearAuthSession();
+    setIsAuthenticated(false);
+    goToLogin();
+  };
+
   if (authPage === "home") {
     return (
       <Home
@@ -112,6 +120,20 @@ function App() {
         isAuthenticated={isAuthenticated}
         onAuthAction={handleAuthAction}
         onBackHome={() => setAuthPage("home")}
+        onOpenChangePassword={() =>
+          isAuthenticated ? setAuthPage("change-password") : goToLogin()
+        }
+        onUnauthorized={handleUnauthorized}
+      />
+    );
+  }
+
+  if (authPage === "change-password") {
+    return (
+      <ChangePassword
+        onBackToProfile={() => setAuthPage("profile")}
+        onChangeSuccess={() => setAuthPage("profile")}
+        onUnauthorized={handleUnauthorized}
       />
     );
   }
