@@ -15,7 +15,7 @@ export const Topbar = ({
   onProfileClick,
   onToggleSidebar,
   sidebarId,
-  title = "Survey PemKot Jogja",
+  title = "Survey Pemkot Jogja",
 }: TopbarProps) => (
   <header className="app-topbar">
     <button
