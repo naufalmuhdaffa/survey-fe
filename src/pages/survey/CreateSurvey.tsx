@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "../../components/sidebar";
 import { Topbar } from "../../components/topbar";
 import adminAvatar from "../../assets/home/home-admin-avatar.png";
+import defaultThumbnailPreview from "../../assets/survey/create-thumbnail-preview.png";
 import "../../styles/survey/CreateSurvey.scss";
 
 const API_BASE_URL = (
@@ -66,6 +67,7 @@ type SurveyQuestion = {
 };
 
 type DraftStorage = {
+  activePage?: number;
   questions?: SurveyQuestion[];
   sectionTitle?: string;
   surveyId?: number | null;
@@ -83,6 +85,10 @@ type IdResult = {
 };
 
 type FieldErrors = Partial<Record<keyof SurveyInfo | "questions", string>>;
+
+type UploadResult = {
+  thumbnail_path?: string;
+};
 
 class UnauthorizedError extends Error {
   constructor() {
@@ -209,6 +215,29 @@ const requestJson = async <TData,>(
   return (await response.json()) as ApiResult<TData>;
 };
 
+const requestFormData = async <TData,>(
+  path: string,
+  formData: FormData,
+  fallbackMessage: string,
+): Promise<ApiResult<TData>> => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    body: formData,
+    credentials: "include",
+    headers: authHeaders(),
+    method: "POST",
+  });
+
+  if (response.status === 401) {
+    throw new UnauthorizedError();
+  }
+
+  if (!response.ok) {
+    throw new Error(await getApiMessage(response, fallbackMessage));
+  }
+
+  return (await response.json()) as ApiResult<TData>;
+};
+
 const buildSurveyPayload = (surveyInfo: SurveyInfo, status = "draft") => ({
   closes_at: toApiDateTime(surveyInfo.closesAt),
   description: surveyInfo.description.trim(),
@@ -231,19 +260,6 @@ const getPublishStatus = (opensAt: string) => {
   return new Date(opensAt).getTime() > Date.now() ? "upcoming" : "open";
 };
 
-const formatAudience = (surveyInfo: SurveyInfo) => {
-  if (surveyInfo.audienceMode === "all" || surveyInfo.positions.length === 0) {
-    return "Semua audiens";
-  }
-
-  return surveyInfo.positions
-    .map((position) => {
-      const match = positionOptions.find((option) => option.value === position);
-      return match?.label ?? position;
-    })
-    .join(", ");
-};
-
 export const CreateSurvey = ({
   accountDescription,
   accountName,
@@ -260,6 +276,7 @@ export const CreateSurvey = ({
   const [surveyId, setSurveyId] = useState<number | null>(
     storedDraft.surveyId ?? null,
   );
+  const [activePage, setActivePage] = useState(storedDraft.activePage ?? 1);
   const [surveyInfo, setSurveyInfo] = useState<SurveyInfo>({
     ...defaultSurveyInfo,
     ...(storedDraft.surveyInfo ?? {}),
@@ -274,18 +291,32 @@ export const CreateSurvey = ({
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [savingQuestionId, setSavingQuestionId] = useState<string | null>(null);
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState(
+    defaultThumbnailPreview,
+  );
+  const thumbnailObjectUrl = useRef<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem(
       DRAFT_STORAGE_KEY,
       JSON.stringify({
+        activePage,
         questions,
         sectionTitle,
         surveyId,
         surveyInfo,
       }),
     );
-  }, [questions, sectionTitle, surveyId, surveyInfo]);
+  }, [activePage, questions, sectionTitle, surveyId, surveyInfo]);
+
+  useEffect(() => {
+    return () => {
+      if (thumbnailObjectUrl.current) {
+        URL.revokeObjectURL(thumbnailObjectUrl.current);
+      }
+    };
+  }, []);
 
   const closeSidebar = () => setIsSidebarOpen(false);
 
@@ -315,6 +346,34 @@ export const CreateSurvey = ({
     }
   };
 
+  const questionPages = useMemo(() => {
+    const pages = new Set([activePage, 1]);
+
+    questions.forEach((question) => pages.add(question.page));
+
+    return Array.from(pages).sort((left, right) => left - right);
+  }, [activePage, questions]);
+
+  const currentPageQuestions = questions.filter(
+    (question) => question.page === activePage,
+  );
+
+  const stepCopy: Record<BuilderStep, { description: string; subtitle: string }> = {
+    1: {
+      description:
+        "Lengkapi detail form di bawah untuk membuat dan menerbitkan survey baru bagi masyarakat.",
+      subtitle: "Langkah 1 dari 3: Informasi Umum",
+    },
+    2: {
+      description: "Langkah 2 dari 3: Isi Kuesioner",
+      subtitle: "Langkah 2 dari 3: Isi Kuesioner",
+    },
+    3: {
+      description: "Lengkapi detail pengaturan untuk mempublikasikan survey Anda.",
+      subtitle: "Langkah 3 dari 3: Pengaturan",
+    },
+  };
+
   const updateSurveyInfo = <TKey extends keyof SurveyInfo>(
     key: TKey,
     value: SurveyInfo[TKey],
@@ -336,6 +395,38 @@ export const CreateSurvey = ({
         positions: nextPositions,
       };
     });
+  };
+
+  const handleThumbnailChange = (file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setFeedback({
+        message: "Format thumbnail harus JPG, PNG, atau WEBP.",
+        type: "error",
+      });
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setFeedback({
+        message: "Ukuran thumbnail maksimal 2MB.",
+        type: "error",
+      });
+      return;
+    }
+
+    if (thumbnailObjectUrl.current) {
+      URL.revokeObjectURL(thumbnailObjectUrl.current);
+    }
+
+    const nextPreviewUrl = URL.createObjectURL(file);
+    thumbnailObjectUrl.current = nextPreviewUrl;
+    setThumbnailFile(file);
+    setThumbnailPreviewUrl(nextPreviewUrl);
+    setFeedback(null);
   };
 
   const validateSurveyInfo = () => {
@@ -381,6 +472,24 @@ export const CreateSurvey = ({
     return error instanceof Error ? error.message : fallbackMessage;
   };
 
+  const uploadThumbnail = async (targetSurveyId: number) => {
+    if (!thumbnailFile) {
+      return null;
+    }
+
+    const formData = new FormData();
+    formData.append("thumbnail", thumbnailFile);
+
+    const result = await requestFormData<UploadResult>(
+      `/surveys/${targetSurveyId}/thumbnail`,
+      formData,
+      "Thumbnail belum bisa diupload.",
+    );
+
+    setThumbnailFile(null);
+    return result.data?.thumbnail_path ?? null;
+  };
+
   const saveSurveyDraft = async () => {
     if (!isAuthenticated) {
       onUnauthorized?.();
@@ -412,6 +521,7 @@ export const CreateSurvey = ({
         }
 
         setSurveyId(nextSurveyId);
+        await uploadThumbnail(nextSurveyId);
         return nextSurveyId;
       }
 
@@ -423,6 +533,7 @@ export const CreateSurvey = ({
         },
         "Draft survey belum bisa disimpan.",
       );
+      await uploadThumbnail(surveyId);
 
       return surveyId;
     } finally {
@@ -475,8 +586,16 @@ export const CreateSurvey = ({
   };
 
   const addQuestion = () => {
-    const question = createQuestion();
+    const question = {
+      ...createQuestion(),
+      page: activePage,
+    };
     setQuestions((current) => [...current, question]);
+  };
+
+  const addQuestionPage = () => {
+    const nextPage = Math.max(...questionPages) + 1;
+    setActivePage(nextPage);
   };
 
   const updateQuestion = (
@@ -677,6 +796,55 @@ export const CreateSurvey = ({
     setQuestions(savedQuestions);
   };
 
+  const persistDraftQuestions = async (targetSurveyId: number) => {
+    const draftQuestions = questions.filter((question) => question.text.trim());
+
+    if (draftQuestions.length === 0) {
+      return;
+    }
+
+    const savedQuestions: SurveyQuestion[] = [];
+
+    for (const question of draftQuestions) {
+      savedQuestions.push(await persistQuestion(targetSurveyId, question));
+    }
+
+    setQuestions((current) =>
+      current.map(
+        (question) =>
+          savedQuestions.find((saved) => saved.localId === question.localId) ??
+          question,
+      ),
+    );
+  };
+
+  const saveDraftOnly = async () => {
+    try {
+      const targetSurveyId = await saveSurveyDraft();
+
+      if (step > 1) {
+        await saveSection(targetSurveyId);
+      }
+
+      if (questions.length > 0) {
+        await persistDraftQuestions(targetSurveyId);
+      }
+
+      setFeedback({
+        message: "Draft survey berhasil disimpan.",
+        type: "success",
+      });
+    } catch (error) {
+      setFeedback({
+        message: getOperationMessage(
+          error,
+          "Draft survey belum bisa disimpan.",
+        ),
+        type: "error",
+      });
+    }
+  };
+
   const leaveBuilder = async () => {
     if (surveyInfo.title.trim() === "") {
       onOpenManageSurveys?.();
@@ -786,12 +954,14 @@ export const CreateSurvey = ({
   };
 
   const renderStepOne = () => (
-    <section className="create-survey-card" aria-labelledby="survey-info-title">
+    <section
+      className="create-survey-card create-survey-card--info"
+      aria-labelledby="survey-info-title"
+    >
       <div className="create-survey-card__header">
-        <span>1</span>
+        <span aria-hidden="true">i</span>
         <div>
-          <h2 id="survey-info-title">Informasi Survey</h2>
-          <p>Data dasar ini akan disimpan sebagai draft.</p>
+          <h2 id="survey-info-title">1. Informasi Umum</h2>
         </div>
       </div>
 
@@ -800,19 +970,19 @@ export const CreateSurvey = ({
           <span>Judul Survey</span>
           <input
             onChange={(event) => updateSurveyInfo("title", event.target.value)}
-            placeholder="Contoh: Survey Kepuasan Layanan Dukcapil"
+            placeholder="Contoh: Survey Kepuasan Layanan Kesehatan"
             value={surveyInfo.title}
           />
           {fieldErrors.title && <small>{fieldErrors.title}</small>}
         </label>
 
         <label className="create-survey-field create-survey-field--wide">
-          <span>Deskripsi</span>
+          <span>Deskripsi / Tujuan Survey</span>
           <textarea
             onChange={(event) =>
               updateSurveyInfo("description", event.target.value)
             }
-            placeholder="Ringkasan singkat tujuan survey"
+            placeholder="Jelaskan secara singkat mengenai tujuan dari pelaksanaan survey ini..."
             rows={4}
             value={surveyInfo.description}
           />
@@ -824,48 +994,100 @@ export const CreateSurvey = ({
             onChange={(event) =>
               updateSurveyInfo("instructions", event.target.value)
             }
-            placeholder="Instruksi yang akan dibaca responden"
+            placeholder="Tuliskan petunjuk teknis pengisian survey untuk responden..."
             rows={3}
             value={surveyInfo.instructions}
           />
         </label>
 
-        <label className="create-survey-field">
-          <span>Estimasi Waktu</span>
-          <input
-            aria-label="Estimasi waktu dalam menit"
-            min="1"
-            onChange={(event) =>
-              updateSurveyInfo("estimatedTime", event.target.value)
-            }
-            placeholder="Menit"
-            type="number"
-            value={surveyInfo.estimatedTime}
-          />
-          {fieldErrors.estimatedTime && <small>{fieldErrors.estimatedTime}</small>}
-        </label>
+        <div className="create-thumbnail-field">
+          <span>Unggah Thumbnail</span>
+          <div className="create-thumbnail-field__body">
+            <figure className="create-thumbnail-preview">
+              <img alt="" src={thumbnailPreviewUrl} />
+              <figcaption>
+                {thumbnailFile ? thumbnailFile.name : "Gambar Default"}
+              </figcaption>
+            </figure>
+            <label className="create-thumbnail-upload">
+              <input
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) =>
+                  handleThumbnailChange(event.target.files?.[0] ?? null)
+                }
+                type="file"
+              />
+              <span aria-hidden="true" />
+              <strong>Pilih File</strong>
+              <small>atau seret gambar ke sini</small>
+            </label>
+          </div>
+          <em>
+            Format: JPG, PNG, WEBP (Maks. 2MB). Rekomendasi 1200x630 px.
+          </em>
+        </div>
+      </div>
+    </section>
+  );
 
-        <label className="create-survey-field">
-          <span>Mulai Publikasi</span>
-          <input
-            onChange={(event) => updateSurveyInfo("opensAt", event.target.value)}
-            type="datetime-local"
-            value={surveyInfo.opensAt}
-          />
-        </label>
+  const renderStepSettings = () => (
+    <section
+      className="create-settings-grid"
+      aria-label="Pengaturan publikasi survey"
+    >
+      <div className="create-settings-card">
+        <header>
+          <span aria-hidden="true" />
+          <h2>Jadwal Survey</h2>
+        </header>
+        <div className="create-settings-card__grid">
+          <label className="create-survey-field">
+            <span>Tanggal Mulai</span>
+            <input
+              onChange={(event) =>
+                updateSurveyInfo("opensAt", event.target.value)
+              }
+              type="datetime-local"
+              value={surveyInfo.opensAt}
+            />
+          </label>
+          <label className="create-survey-field">
+            <span>Tanggal Selesai</span>
+            <input
+              onChange={(event) =>
+                updateSurveyInfo("closesAt", event.target.value)
+              }
+              type="datetime-local"
+              value={surveyInfo.closesAt}
+            />
+            {fieldErrors.closesAt && <small>{fieldErrors.closesAt}</small>}
+          </label>
+          <label className="create-survey-field create-survey-field--wide">
+            <span>Estimasi Waktu</span>
+            <input
+              aria-label="Estimasi waktu dalam menit"
+              min="1"
+              onChange={(event) =>
+                updateSurveyInfo("estimatedTime", event.target.value)
+              }
+              placeholder="Menit"
+              type="number"
+              value={surveyInfo.estimatedTime}
+            />
+            {fieldErrors.estimatedTime && (
+              <small>{fieldErrors.estimatedTime}</small>
+            )}
+          </label>
+        </div>
+      </div>
 
-        <label className="create-survey-field">
-          <span>Selesai Publikasi</span>
-          <input
-            onChange={(event) => updateSurveyInfo("closesAt", event.target.value)}
-            type="datetime-local"
-            value={surveyInfo.closesAt}
-          />
-          {fieldErrors.closesAt && <small>{fieldErrors.closesAt}</small>}
-        </label>
-
+      <div className="create-settings-card">
+        <header>
+          <span aria-hidden="true" />
+          <h2>Target Responden</h2>
+        </header>
         <div className="create-survey-audience">
-          <span>Audiens</span>
+          <span>Pilih Audiens</span>
           <label>
             <input
               checked={surveyInfo.audienceMode === "all"}
@@ -1032,36 +1254,66 @@ export const CreateSurvey = ({
   );
 
   const renderStepTwo = () => (
-    <section className="create-survey-card" aria-labelledby="survey-question-title">
-      <div className="create-survey-card__header">
-        <span>2</span>
-        <div>
-          <h2 id="survey-question-title">Pertanyaan Survey</h2>
-          <p>Susun section dan pertanyaan yang akan ditampilkan.</p>
-        </div>
+    <section className="create-question-canvas" aria-labelledby="survey-question-title">
+      <div className="create-question-tabs" role="tablist" aria-label="Halaman survey">
+        {questionPages.map((pageNumber) => (
+          <button
+            aria-selected={activePage === pageNumber}
+            className={activePage === pageNumber ? "is-active" : ""}
+            key={pageNumber}
+            onClick={() => setActivePage(pageNumber)}
+            role="tab"
+            type="button"
+          >
+            Halaman {pageNumber}
+          </button>
+        ))}
+        <button
+          aria-label="Tambah halaman survey"
+          className="create-question-tabs__add"
+          onClick={addQuestionPage}
+          type="button"
+        >
+          +
+        </button>
       </div>
 
-      <label className="create-survey-field create-survey-field--wide">
+      <div className="create-question-title-row">
+        <h2 id="survey-question-title">
+          Pertanyaan Kuesioner (Halaman {activePage})
+        </h2>
+        <button aria-label="Ubah section" type="button">
+          <span aria-hidden="true" />
+        </button>
+      </div>
+
+      <label className="create-section-field">
         <span>Section</span>
         <input
           onChange={(event) => setSectionTitle(event.target.value)}
-          placeholder="Contoh: Pengalaman Menggunakan Layanan"
+          placeholder="Contoh: Pelayanan Publik"
           value={sectionTitle}
         />
       </label>
 
-      {questions.length === 0 ? (
+      {currentPageQuestions.length === 0 ? (
         <div className="create-question-empty">
+          <span aria-hidden="true" />
           <strong>Belum ada pertanyaan</strong>
-          <p>Tambahkan pertanyaan pertama untuk mulai menyusun survey.</p>
+          <p>
+            Tambahkan pertanyaan baru ke dalam bagian ini untuk mengelompokkan
+            kuesioner Anda.
+          </p>
           <button onClick={addQuestion} type="button">
+            <span aria-hidden="true">+</span>
             Tambah Pertanyaan
           </button>
         </div>
       ) : (
         <div className="create-question-list">
-          {questions.map(renderQuestionCard)}
+          {currentPageQuestions.map(renderQuestionCard)}
           <button className="create-question-add" onClick={addQuestion} type="button">
+            <span aria-hidden="true">+</span>
             Tambah Pertanyaan
           </button>
         </div>
@@ -1073,63 +1325,60 @@ export const CreateSurvey = ({
     </section>
   );
 
-  const renderStepThree = () => (
-    <section className="create-survey-card" aria-labelledby="survey-preview-title">
-      <div className="create-survey-card__header">
-        <span>3</span>
-        <div>
-          <h2 id="survey-preview-title">Pratinjau Sebelum Publikasi</h2>
-          <p>Periksa kembali isi survey sebelum dipublikasikan.</p>
-        </div>
-      </div>
+  const renderBreadcrumbs = () => {
+    if (step === 1) {
+      return (
+        <button
+          className="create-survey-back-link"
+          onClick={() => void leaveBuilder()}
+          type="button"
+        >
+          <span aria-hidden="true">{"<"}</span>
+          Kembali ke Daftar Survey
+        </button>
+      );
+    }
 
-      <div className="create-survey-preview">
-        <div>
-          <span>Judul</span>
-          <strong>{surveyInfo.title || "-"}</strong>
-        </div>
-        <div>
-          <span>Audiens</span>
-          <strong>{formatAudience(surveyInfo)}</strong>
-        </div>
-        <div>
-          <span>Jumlah Pertanyaan</span>
-          <strong>{questions.length}</strong>
-        </div>
-        <div>
-          <span>Status Setelah Publikasi</span>
-          <strong>{getPublishStatus(surveyInfo.opensAt).toUpperCase()}</strong>
-        </div>
+    return (
+      <div className="create-survey-breadcrumbs" aria-label="Breadcrumb">
+        <span>Beranda</span>
+        <span aria-hidden="true">{">"}</span>
+        <span>Kelola Survey</span>
+        <span aria-hidden="true">{">"}</span>
+        <strong>Buat Survey Baru</strong>
       </div>
+    );
+  };
 
-      <div className="create-survey-preview-section">
-        <h3>{sectionTitle || "Tanpa section"}</h3>
-        {questions.length === 0 ? (
-          <p>Belum ada pertanyaan.</p>
-        ) : (
-          questions.map((question, index) => (
-            <article key={question.localId}>
-              <span>Pertanyaan {index + 1}</span>
-              <strong>{question.text || "Pertanyaan belum diisi"}</strong>
-              <small>
-                {
-                  questionTypes.find((type) => type.value === question.type)
-                    ?.label
-                }
-                {question.isRequired ? " - Wajib" : " - Opsional"}
-              </small>
-              {isChoiceQuestion(question.type) && (
-                <ul>
-                  {question.options.map((option) => (
-                    <li key={option.localId}>{option.text || "Opsi kosong"}</li>
-                  ))}
-                </ul>
-              )}
-            </article>
-          ))
-        )}
-      </div>
-    </section>
+  const renderStepIndicator = () => (
+    <nav className="create-survey-steps" aria-label="Tahap buat survey">
+      {([1, 2, 3] as BuilderStep[]).map((stepNumber, index) => {
+        const isComplete = stepNumber < step;
+        const isActive = stepNumber === step;
+
+        return (
+          <button
+            className={[
+              isActive ? "is-active" : "",
+              isComplete ? "is-complete" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            key={stepNumber}
+            onClick={() => void goToStep(stepNumber)}
+            type="button"
+          >
+            <span aria-hidden="true">{isComplete ? "" : stepNumber}</span>
+            {stepNumber === 1
+              ? "Informasi Umum"
+              : stepNumber === 2
+                ? "Isi Survey"
+                : "Pengaturan"}
+            {index < 2 && <i aria-hidden="true" />}
+          </button>
+        );
+      })}
+    </nav>
   );
 
   return (
@@ -1160,32 +1409,14 @@ export const CreateSurvey = ({
         <div className="create-survey-content">
           <header className="create-survey-heading">
             <div>
-              <button onClick={() => void leaveBuilder()} type="button">
-                Kembali ke Kelola Survey
-              </button>
+              {renderBreadcrumbs()}
               <h1>Buat Survey Baru</h1>
-              <p>Draft tersimpan otomatis saat berpindah tahap.</p>
+              <p>{step === 1 ? stepCopy[step].description : stepCopy[step].subtitle}</p>
             </div>
             <span>{surveyId ? `Draft #${surveyId}` : "Draft baru"}</span>
           </header>
 
-          <nav className="create-survey-steps" aria-label="Tahap buat survey">
-            {[1, 2, 3].map((stepNumber) => (
-              <button
-                className={step === stepNumber ? "is-active" : ""}
-                key={stepNumber}
-                onClick={() => void goToStep(stepNumber as BuilderStep)}
-                type="button"
-              >
-                <span>{stepNumber}</span>
-                {stepNumber === 1
-                  ? "Informasi"
-                  : stepNumber === 2
-                    ? "Pertanyaan"
-                    : "Publikasi"}
-              </button>
-            ))}
-          </nav>
+          {renderStepIndicator()}
 
           {feedback && (
             <p
@@ -1197,7 +1428,7 @@ export const CreateSurvey = ({
 
           {step === 1 && renderStepOne()}
           {step === 2 && renderStepTwo()}
-          {step === 3 && renderStepThree()}
+          {step === 3 && renderStepSettings()}
 
           <footer className="create-survey-footer">
             <button
@@ -1211,13 +1442,21 @@ export const CreateSurvey = ({
             >
               {step === 1 ? "Batal" : "Kembali"}
             </button>
+            <div>
+              <button
+                disabled={isSaving}
+                onClick={() => void saveDraftOnly()}
+                type="button"
+              >
+                Simpan Draft
+              </button>
             {step < 3 ? (
               <button
                 disabled={isSaving}
                 onClick={() => void goToStep((step + 1) as BuilderStep)}
                 type="button"
               >
-                {isSaving ? "Menyimpan..." : "Simpan & Lanjut"}
+                {isSaving ? "Menyimpan..." : "Selanjutnya ->"}
               </button>
             ) : (
               <button
@@ -1225,9 +1464,10 @@ export const CreateSurvey = ({
                 onClick={() => void publishSurvey()}
                 type="button"
               >
-                {isSaving ? "Mempublikasikan..." : "Publikasikan Survey"}
+                {isSaving ? "Mempublikasikan..." : "Publikasikan Survey >"}
               </button>
             )}
+            </div>
           </footer>
         </div>
       </section>
