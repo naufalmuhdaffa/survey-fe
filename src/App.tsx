@@ -36,7 +36,7 @@ type ProfileApiResult = {
 
 const PAGE_PATHS: Record<AuthPage, string> = {
   "change-password": "/profile/change-password",
-  "create-survey": "/surveys/create",
+  "create-survey": "/surveys/create/informasi-umum",
   "forgot-password": "/forgot-password",
   home: "/",
   login: "/login",
@@ -45,6 +45,12 @@ const PAGE_PATHS: Record<AuthPage, string> = {
   register: "/register",
   "reset-password": "/reset-password",
 };
+
+const CREATE_SURVEY_BASE_PATH = "/surveys/create";
+
+const isCreateSurveyPath = (path: string) =>
+  path === CREATE_SURVEY_BASE_PATH ||
+  path.startsWith(`${CREATE_SURVEY_BASE_PATH}/`);
 
 const hasStoredAuth = () =>
   Boolean(
@@ -75,7 +81,7 @@ const getInitialAuthPage = (): AuthPage => {
   if (
     (normalizedPath === PAGE_PATHS.profile ||
       normalizedPath === PAGE_PATHS["change-password"] ||
-      normalizedPath === PAGE_PATHS["create-survey"] ||
+      isCreateSurveyPath(normalizedPath) ||
       normalizedPath === PAGE_PATHS["manage-surveys"]) &&
     !hasStoredAuth()
   ) {
@@ -90,7 +96,7 @@ const getInitialAuthPage = (): AuthPage => {
     return "change-password";
   }
 
-  if (normalizedPath === PAGE_PATHS["create-survey"]) {
+  if (isCreateSurveyPath(normalizedPath)) {
     return "create-survey";
   }
 
@@ -119,6 +125,14 @@ const getInitialAuthPage = (): AuthPage => {
 
 const syncUrl = (page: AuthPage, replace = false) => {
   const url = new URL(window.location.href);
+
+  if (
+    page === "create-survey" &&
+    isCreateSurveyPath(url.pathname.replace(/\/+$/, ""))
+  ) {
+    return;
+  }
+
   url.pathname = PAGE_PATHS[page];
 
   if (page !== "reset-password") {

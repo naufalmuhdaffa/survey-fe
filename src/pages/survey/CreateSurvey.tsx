@@ -39,15 +39,15 @@ type FeedbackType = "error" | "info" | "success";
 type QuestionType =
   | "checkbox"
   | "dropdown"
-  | "file_upload"
   | "free_text"
-  | "radio_button"
-  | "rating_scale";
+  | "radio_button";
 
 type Feedback = {
   message: string;
   type: FeedbackType;
 };
+
+type StepRoute = "informasi-umum" | "isi-survey" | "pengaturan";
 
 type SurveyInfo = {
   audienceMode: AudienceMode;
@@ -80,6 +80,7 @@ type DraftStorage = {
   activePage?: number;
   questions?: SurveyQuestion[];
   sectionTitle?: string;
+  sectionTitles?: Record<string, string>;
   surveyId?: number | null;
   surveyInfo?: SurveyInfo;
 };
@@ -100,6 +101,18 @@ type UploadResult = {
   thumbnail_path?: string;
 };
 
+const stepRoutes: Record<BuilderStep, StepRoute> = {
+  1: "informasi-umum",
+  2: "isi-survey",
+  3: "pengaturan",
+};
+
+const routeSteps: Record<StepRoute, BuilderStep> = {
+  "informasi-umum": 1,
+  "isi-survey": 2,
+  pengaturan: 3,
+};
+
 class UnauthorizedError extends Error {
   constructor() {
     super("Sesi login berakhir. Silakan login kembali.");
@@ -111,14 +124,24 @@ const questionTypes: Array<{ label: string; value: QuestionType }> = [
   { label: "Pilihan Tunggal", value: "radio_button" },
   { label: "Pilihan Ganda", value: "checkbox" },
   { label: "Dropdown", value: "dropdown" },
-  { label: "Skala Rating", value: "rating_scale" },
-  { label: "Upload File", value: "file_upload" },
 ];
 
 const positionOptions = [
-  { label: "Masyarakat", value: "public" },
-  { label: "Pegawai ASN", value: "asn" },
-  { label: "Pegawai Non-ASN", value: "non_asn" },
+  {
+    description: "Mencakup semua responden, termasuk ASN dan Non-ASN.",
+    label: "Masyarakat Umum",
+    value: "public",
+  },
+  {
+    description: "Hanya user dengan status Pegawai ASN.",
+    label: "Pegawai ASN",
+    value: "asn",
+  },
+  {
+    description: "Hanya user dengan status Pegawai Non-ASN.",
+    label: "Pegawai Non-ASN",
+    value: "non_asn",
+  },
 ];
 
 const defaultSurveyInfo: SurveyInfo = {
@@ -163,7 +186,7 @@ const authHeaders = (): Record<string, string> => {
 };
 
 const isChoiceQuestion = (type: QuestionType) =>
-  ["checkbox", "dropdown", "radio_button", "rating_scale"].includes(type);
+  ["checkbox", "dropdown", "radio_button"].includes(type);
 
 const toApiDateTime = (value: string) => {
   if (!value) {
@@ -185,6 +208,54 @@ const readStoredDraft = (): DraftStorage => {
   } catch {
     return {};
   }
+};
+
+const getStepFromUrl = (): BuilderStep => {
+  const [, route] =
+    window.location.pathname.match(/\/surveys\/create\/([^/]+)/) ?? [];
+
+  if (route && route in routeSteps) {
+    return routeSteps[route as StepRoute];
+  }
+
+  return 1;
+};
+
+const getQuestionPageFromUrl = (fallbackPage = 1) => {
+  const [, route, page] =
+    window.location.pathname.match(/\/surveys\/create\/([^/]+)\/(\d+)/) ?? [];
+
+  if (route !== stepRoutes[2]) {
+    return fallbackPage;
+  }
+
+  const parsedPage = Number(page);
+  return Number.isFinite(parsedPage) && parsedPage > 0
+    ? parsedPage
+    : fallbackPage;
+};
+
+const syncStepUrl = (step: BuilderStep, activePage = 1, replace = false) => {
+  const url = new URL(window.location.href);
+  url.pathname =
+    step === 2
+      ? `/surveys/create/${stepRoutes[step]}/${Math.max(1, activePage)}`
+      : `/surveys/create/${stepRoutes[step]}`;
+
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  const currentUrl =
+    `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+  if (nextUrl === currentUrl) {
+    return;
+  }
+
+  if (replace) {
+    window.history.replaceState({}, "", nextUrl);
+    return;
+  }
+
+  window.history.pushState({}, "", nextUrl);
 };
 
 const getApiMessage = async (response: Response, fallback: string) => {
@@ -282,25 +353,32 @@ export const CreateSurvey = ({
 }: CreateSurveyProps) => {
   const storedDraft = useMemo(() => readStoredDraft(), []);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [step, setStep] = useState<BuilderStep>(1);
+  const [step, setStep] = useState<BuilderStep>(() => getStepFromUrl());
   const [surveyId, setSurveyId] = useState<number | null>(
     storedDraft.surveyId ?? null,
   );
-  const [activePage, setActivePage] = useState(storedDraft.activePage ?? 1);
+  const [activePage, setActivePage] = useState(() =>
+    getQuestionPageFromUrl(storedDraft.activePage ?? 1),
+  );
   const [surveyInfo, setSurveyInfo] = useState<SurveyInfo>({
     ...defaultSurveyInfo,
     ...(storedDraft.surveyInfo ?? {}),
   });
-  const [sectionTitle, setSectionTitle] = useState(
-    storedDraft.sectionTitle ?? "",
-  );
+  const [sectionTitles, setSectionTitles] = useState<Record<number, string>>({
+    1: storedDraft.sectionTitle ?? "",
+    ...Object.fromEntries(
+      Object.entries(storedDraft.sectionTitles ?? {}).map(([page, title]) => [
+        Number(page),
+        title,
+      ]),
+    ),
+  });
   const [questions, setQuestions] = useState<SurveyQuestion[]>(
     storedDraft.questions ?? [],
   );
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [savingQuestionId, setSavingQuestionId] = useState<string | null>(null);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState(
     defaultThumbnailPreview,
@@ -313,12 +391,12 @@ export const CreateSurvey = ({
       JSON.stringify({
         activePage,
         questions,
-        sectionTitle,
+        sectionTitles,
         surveyId,
         surveyInfo,
       }),
     );
-  }, [activePage, questions, sectionTitle, surveyId, surveyInfo]);
+  }, [activePage, questions, sectionTitles, surveyId, surveyInfo]);
 
   useEffect(() => {
     return () => {
@@ -327,6 +405,30 @@ export const CreateSurvey = ({
       }
     };
   }, []);
+
+  useEffect(() => {
+    syncStepUrl(step, activePage, true);
+
+    const handlePopState = () => {
+      setStep(getStepFromUrl());
+      setActivePage((currentPage) => getQuestionPageFromUrl(currentPage));
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [activePage, step]);
+
+  useEffect(() => {
+    if (!feedback) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setFeedback(null);
+    }, 4600);
+
+    return () => window.clearTimeout(timerId);
+  }, [feedback]);
 
   const closeSidebar = () => setIsSidebarOpen(false);
 
@@ -367,6 +469,7 @@ export const CreateSurvey = ({
   const currentPageQuestions = questions.filter(
     (question) => question.page === activePage,
   );
+  const currentSectionTitle = sectionTitles[activePage] ?? "";
 
   const stepCopy: Record<BuilderStep, { description: string; subtitle: string }> = {
     1: {
@@ -394,7 +497,48 @@ export const CreateSurvey = ({
     }));
   };
 
+  const updateSectionTitle = (value: string) => {
+    setSectionTitles((current) => ({
+      ...current,
+      [activePage]: value,
+    }));
+  };
+
+  const setBuilderStep = (nextStep: BuilderStep, replace = false) => {
+    setStep(nextStep);
+    syncStepUrl(nextStep, activePage, replace);
+  };
+
+  const selectQuestionPage = (pageNumber: number) => {
+    const nextPage = Math.max(1, pageNumber);
+    setActivePage(nextPage);
+
+    if (step === 2) {
+      syncStepUrl(2, nextPage);
+    }
+  };
+
+  const isAudienceSelected = (position: string) => {
+    if (position === "public") {
+      return surveyInfo.audienceMode === "all";
+    }
+
+    return (
+      surveyInfo.audienceMode === "limited" &&
+      surveyInfo.positions.includes(position)
+    );
+  };
+
   const togglePosition = (position: string) => {
+    if (position === "public") {
+      setSurveyInfo((current) => ({
+        ...current,
+        audienceMode: "all",
+        positions: [],
+      }));
+      return;
+    }
+
     setSurveyInfo((current) => {
       const nextPositions = current.positions.includes(position)
         ? current.positions.filter((item) => item !== position)
@@ -402,6 +546,7 @@ export const CreateSurvey = ({
 
       return {
         ...current,
+        audienceMode: nextPositions.length > 0 ? "limited" : "all",
         positions: nextPositions,
       };
     });
@@ -551,15 +696,19 @@ export const CreateSurvey = ({
     }
   };
 
-  const saveSection = async (targetSurveyId: number) => {
-    await requestJson(
-      `/surveys/${targetSurveyId}/pages/1`,
-      {
-        body: JSON.stringify({ section: sectionTitle.trim() }),
-        method: "PUT",
-      },
-      "Section belum bisa disimpan.",
-    );
+  const saveSections = async (targetSurveyId: number) => {
+    for (const pageNumber of questionPages) {
+      const section = (sectionTitles[pageNumber] ?? "").trim();
+
+      await requestJson(
+        `/surveys/${targetSurveyId}/pages/${pageNumber}`,
+        {
+          body: JSON.stringify({ section }),
+          method: "PUT",
+        },
+        "Section belum bisa disimpan.",
+      );
+    }
   };
 
   const goToStep = async (nextStep: BuilderStep) => {
@@ -567,7 +716,7 @@ export const CreateSurvey = ({
       const targetSurveyId = await saveSurveyDraft();
 
       if (nextStep > 1 || step > 1) {
-        await saveSection(targetSurveyId);
+        await saveSections(targetSurveyId);
       }
 
       if (nextStep === 3 && questions.length === 0) {
@@ -583,7 +732,7 @@ export const CreateSurvey = ({
         message: "Draft tersimpan otomatis.",
         type: "success",
       });
-      setStep(nextStep);
+      setBuilderStep(nextStep);
     } catch (error) {
       setFeedback({
         message: getOperationMessage(
@@ -601,11 +750,16 @@ export const CreateSurvey = ({
       page: activePage,
     };
     setQuestions((current) => [...current, question]);
+    setFieldErrors((current) => {
+      const nextErrors = { ...current };
+      delete nextErrors.questions;
+      return nextErrors;
+    });
   };
 
   const addQuestionPage = () => {
     const nextPage = Math.max(...questionPages) + 1;
-    setActivePage(nextPage);
+    selectQuestionPage(nextPage);
   };
 
   const updateQuestion = (
@@ -833,7 +987,7 @@ export const CreateSurvey = ({
       const targetSurveyId = await saveSurveyDraft();
 
       if (step > 1) {
-        await saveSection(targetSurveyId);
+        await saveSections(targetSurveyId);
       }
 
       if (questions.length > 0) {
@@ -865,7 +1019,7 @@ export const CreateSurvey = ({
       const targetSurveyId = await saveSurveyDraft();
 
       if (step > 1) {
-        await saveSection(targetSurveyId);
+        await saveSections(targetSurveyId);
       }
 
       if (questions.length > 0) {
@@ -885,34 +1039,6 @@ export const CreateSurvey = ({
     onOpenManageSurveys?.();
   };
 
-  const saveQuestion = async (question: SurveyQuestion) => {
-    setSavingQuestionId(question.localId);
-
-    try {
-      const targetSurveyId = await saveSurveyDraft();
-      const savedQuestion = await persistQuestion(targetSurveyId, question);
-      setQuestions((current) =>
-        current.map((item) =>
-          item.localId === question.localId ? savedQuestion : item,
-        ),
-      );
-      setFeedback({
-        message: "Pertanyaan tersimpan ke draft.",
-        type: "success",
-      });
-    } catch (error) {
-      setFeedback({
-        message: getOperationMessage(
-          error,
-          "Pertanyaan belum bisa disimpan.",
-        ),
-        type: "error",
-      });
-    } finally {
-      setSavingQuestionId(null);
-    }
-  };
-
   const publishSurvey = async () => {
     if (questions.length === 0) {
       setFieldErrors({ questions: "Tambahkan minimal satu pertanyaan." });
@@ -927,7 +1053,7 @@ export const CreateSurvey = ({
 
     try {
       const targetSurveyId = await saveSurveyDraft();
-      await saveSection(targetSurveyId);
+      await saveSections(targetSurveyId);
       await persistAllQuestions(targetSurveyId);
 
       await requestJson(
@@ -1102,50 +1228,21 @@ export const CreateSurvey = ({
         </header>
         <div className="create-survey-audience">
           <span>Pilih Audiens</span>
-          <label>
-            <input
-              checked={surveyInfo.audienceMode === "all"}
-              onChange={() =>
-                setSurveyInfo((current) => ({
-                  ...current,
-                  audienceMode: "all",
-                  positions: [],
-                }))
-              }
-              type="radio"
-            />
-            Semua audiens
-          </label>
-          <label>
-            <input
-              checked={surveyInfo.audienceMode === "limited"}
-              onChange={() =>
-                setSurveyInfo((current) => ({
-                  ...current,
-                  audienceMode: "limited",
-                  positions:
-                    current.positions.length > 0 ? current.positions : ["public"],
-                }))
-              }
-              type="radio"
-            />
-            Batasi audiens
-          </label>
-
-          {surveyInfo.audienceMode === "limited" && (
-            <div className="create-survey-audience__checks">
-              {positionOptions.map((option) => (
-                <label key={option.value}>
-                  <input
-                    checked={surveyInfo.positions.includes(option.value)}
-                    onChange={() => togglePosition(option.value)}
-                    type="checkbox"
-                  />
-                  {option.label}
-                </label>
-              ))}
-            </div>
-          )}
+          <div className="create-survey-audience__checks">
+            {positionOptions.map((option) => (
+              <label key={option.value}>
+                <input
+                  checked={isAudienceSelected(option.value)}
+                  onChange={() => togglePosition(option.value)}
+                  type="checkbox"
+                />
+                <span>
+                  <strong>{option.label}</strong>
+                  <small>{option.description}</small>
+                </span>
+              </label>
+            ))}
+          </div>
           {fieldErrors.positions && <small>{fieldErrors.positions}</small>}
         </div>
       </div>
@@ -1155,130 +1252,132 @@ export const CreateSurvey = ({
   const renderQuestionCard = (question: SurveyQuestion, index: number) => (
     <article className="create-question-card" key={question.localId}>
       <header>
-        <strong>Pertanyaan {index + 1}</strong>
-        <div>
-          <button onClick={() => void saveQuestion(question)} type="button">
-            {savingQuestionId === question.localId ? "Menyimpan..." : "Simpan"}
-          </button>
-          <button onClick={() => void deleteQuestion(question)} type="button">
-            <img src={deleteIcon} alt="" aria-hidden="true" />
-            Hapus
-          </button>
-        </div>
+        <strong>Teks Pertanyaan {index + 1}</strong>
+        <button
+          aria-label={`Hapus pertanyaan ${index + 1}`}
+          onClick={() => void deleteQuestion(question)}
+          type="button"
+        >
+          <img src={deleteIcon} alt="" aria-hidden="true" />
+        </button>
       </header>
 
       <div className="create-question-grid">
-        <label className="create-survey-field create-survey-field--wide">
-          <span>Teks Pertanyaan</span>
-          <textarea
-            onChange={(event) =>
-              updateQuestion(question.localId, (current) => ({
-                ...current,
-                text: event.target.value,
-              }))
-            }
-            placeholder="Tulis pertanyaan untuk responden"
-            rows={3}
-            value={question.text}
-          />
-        </label>
+        <div className="create-question-main">
+          <label className="create-survey-field">
+            <span>Teks Pertanyaan {index + 1}</span>
+            <textarea
+              onChange={(event) =>
+                updateQuestion(question.localId, (current) => ({
+                  ...current,
+                  text: event.target.value,
+                }))
+              }
+              placeholder="Tulis pertanyaan untuk responden"
+              rows={3}
+              value={question.text}
+            />
+          </label>
 
-        <label className="create-survey-field">
-          <span>Tipe Jawaban</span>
-          <select
-            onChange={(event) =>
-              changeQuestionType(
-                question.localId,
-                event.target.value as QuestionType,
-              )
-            }
-            value={question.type}
-          >
-            {questionTypes.map((type) => (
-              <option key={type.value} value={type.value}>
-                {type.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="create-survey-field">
-          <span>Halaman</span>
-          <input
-            min="1"
-            onChange={(event) =>
-              updateQuestion(question.localId, (current) => ({
-                ...current,
-                page: Math.max(1, Number(event.target.value) || 1),
-              }))
-            }
-            type="number"
-            value={question.page}
-          />
-        </label>
-
-        <label className="create-survey-switch">
-          <input
-            checked={question.isRequired}
-            onChange={(event) =>
-              updateQuestion(question.localId, (current) => ({
-                ...current,
-                isRequired: event.target.checked,
-              }))
-            }
-            type="checkbox"
-          />
-          Wajib diisi
-        </label>
-      </div>
-
-      {isChoiceQuestion(question.type) && (
-        <div className="create-question-options">
-          <span>Opsi Jawaban</span>
-          {question.options.map((option, optionIndex) => (
-            <div key={option.localId}>
-              <input
-                onChange={(event) =>
-                  updateQuestion(question.localId, (current) => ({
-                    ...current,
-                    options: current.options.map((item) =>
-                      item.localId === option.localId
-                        ? { ...item, text: event.target.value }
-                        : item,
-                    ),
-                  }))
-                }
-                placeholder={`Opsi ${optionIndex + 1}`}
-                value={option.text}
-              />
-              <button
-                disabled={question.options.length <= 2}
-                onClick={() => void removeOption(question.localId, option)}
-                type="button"
-              >
-                <img src={deleteIcon} alt="" aria-hidden="true" />
-                Hapus
+          {isChoiceQuestion(question.type) ? (
+            <div className="create-question-options">
+              <span>Pilihan Jawaban</span>
+              {question.options.map((option, optionIndex) => (
+                <div key={option.localId}>
+                  <i
+                    aria-hidden="true"
+                    className={`create-option-marker create-option-marker--${question.type}`}
+                  />
+                  <input
+                    onChange={(event) =>
+                      updateQuestion(question.localId, (current) => ({
+                        ...current,
+                        options: current.options.map((item) =>
+                          item.localId === option.localId
+                            ? { ...item, text: event.target.value }
+                            : item,
+                        ),
+                      }))
+                    }
+                    placeholder={`Pilihan ${optionIndex + 1}`}
+                    value={option.text}
+                  />
+                  <button
+                    aria-label={`Hapus opsi ${optionIndex + 1}`}
+                    disabled={question.options.length <= 2}
+                    onClick={() => void removeOption(question.localId, option)}
+                    type="button"
+                  >
+                    <img src={deleteIcon} alt="" aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+              <button onClick={() => addOption(question.localId)} type="button">
+                <img src={addOptionIcon} alt="" aria-hidden="true" />
+                Tambah Opsi
               </button>
             </div>
-          ))}
-          <button onClick={() => addOption(question.localId)} type="button">
-            <img src={addOptionIcon} alt="" aria-hidden="true" />
-            Tambah Opsi
-          </button>
+          ) : (
+            <div className="create-question-preview">
+              Placeholder untuk jawaban responden...
+            </div>
+          )}
         </div>
-      )}
+
+        <aside className="create-question-side">
+          <label className="create-survey-field">
+            <span>Tipe Pertanyaan</span>
+            <select
+              onChange={(event) =>
+                changeQuestionType(
+                  question.localId,
+                  event.target.value as QuestionType,
+                )
+              }
+              value={question.type}
+            >
+              {questionTypes.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="create-survey-switch">
+            <input
+              checked={question.isRequired}
+              onChange={(event) =>
+                updateQuestion(question.localId, (current) => ({
+                  ...current,
+                  isRequired: event.target.checked,
+                }))
+              }
+              type="checkbox"
+            />
+            Wajib Diisi
+          </label>
+        </aside>
+      </div>
     </article>
   );
 
   const renderStepTwo = () => (
-    <section className="create-question-canvas" aria-labelledby="survey-question-title">
-      <div className="create-question-tabs" role="tablist" aria-label="Halaman survey">
+    <section
+      className="create-question-canvas"
+      aria-labelledby="survey-question-title"
+    >
+      <div
+        className="create-question-tabs"
+        role="tablist"
+        aria-label="Halaman survey"
+      >
         {questionPages.map((pageNumber) => (
           <button
             aria-selected={activePage === pageNumber}
             className={activePage === pageNumber ? "is-active" : ""}
             key={pageNumber}
-            onClick={() => setActivePage(pageNumber)}
+            onClick={() => selectQuestionPage(pageNumber)}
             role="tab"
             type="button"
           >
@@ -1296,22 +1395,22 @@ export const CreateSurvey = ({
       </div>
 
       <div className="create-question-title-row">
-        <h2 id="survey-question-title">
-          Pertanyaan Kuesioner (Halaman {activePage})
-        </h2>
-        <button aria-label="Ubah section" type="button">
+        <label
+          className="create-section-title"
+          htmlFor="survey-section-title"
+          id="survey-question-title"
+        >
+          <input
+            id="survey-section-title"
+            onChange={(event) => updateSectionTitle(event.target.value)}
+            placeholder={`Section Halaman ${activePage}`}
+            value={currentSectionTitle}
+          />
+        </label>
+        <button aria-label="Ubah nama section" type="button">
           <img src={editIcon} alt="" aria-hidden="true" />
         </button>
       </div>
-
-      <label className="create-section-field">
-        <span>Section</span>
-        <input
-          onChange={(event) => setSectionTitle(event.target.value)}
-          placeholder="Contoh: Pelayanan Publik"
-          value={sectionTitle}
-        />
-      </label>
 
       {currentPageQuestions.length === 0 ? (
         <div className="create-question-empty">
@@ -1331,7 +1430,11 @@ export const CreateSurvey = ({
       ) : (
         <div className="create-question-list">
           {currentPageQuestions.map(renderQuestionCard)}
-          <button className="create-question-add" onClick={addQuestion} type="button">
+          <button
+            className="create-question-add"
+            onClick={addQuestion}
+            type="button"
+          >
             <img src={plusIcon} alt="" aria-hidden="true" />
             Tambah Pertanyaan
           </button>
@@ -1339,7 +1442,7 @@ export const CreateSurvey = ({
       )}
 
       {fieldErrors.questions && (
-        <p className="create-survey-inline-error">{fieldErrors.questions}</p>
+        <span className="create-survey-sr-only">{fieldErrors.questions}</span>
       )}
     </section>
   );
@@ -1432,7 +1535,11 @@ export const CreateSurvey = ({
             <div>
               {renderBreadcrumbs()}
               <h1>Buat Survey Baru</h1>
-              <p>{step === 1 ? stepCopy[step].description : stepCopy[step].subtitle}</p>
+              <p>
+                {step === 1
+                  ? stepCopy[step].description
+                  : stepCopy[step].subtitle}
+              </p>
             </div>
             <span>{surveyId ? `Draft #${surveyId}` : "Draft baru"}</span>
           </header>
@@ -1440,11 +1547,26 @@ export const CreateSurvey = ({
           {renderStepIndicator()}
 
           {feedback && (
-            <p
-              className={`create-survey-feedback create-survey-feedback--${feedback.type}`}
+            <div
+              className={`create-survey-toast create-survey-toast--${feedback.type}`}
+              role={feedback.type === "error" ? "alert" : "status"}
             >
-              {feedback.message}
-            </p>
+              <strong>
+                {feedback.type === "error"
+                  ? "Gagal"
+                  : feedback.type === "success"
+                    ? "Berhasil"
+                    : "Info"}
+              </strong>
+              <span>{feedback.message}</span>
+              <button
+                aria-label="Tutup pesan"
+                onClick={() => setFeedback(null)}
+                type="button"
+              >
+                x
+              </button>
+            </div>
           )}
 
           {step === 1 && renderStepOne()}
@@ -1461,7 +1583,9 @@ export const CreateSurvey = ({
               }
               type="button"
             >
-              {step !== 1 && <img src={arrowLeftIcon} alt="" aria-hidden="true" />}
+              {step !== 1 && (
+                <img src={arrowLeftIcon} alt="" aria-hidden="true" />
+              )}
               {step === 1 ? "Batal" : "Kembali"}
             </button>
             <div>
