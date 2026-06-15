@@ -1,3 +1,82 @@
 #root {
   width: 100%;
 }
+
+.app-logout-dialog {
+  align-items: center;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 80;
+}
+
+.app-logout-dialog__backdrop {
+  background: rgba(11, 28, 48, 0.42);
+  border: 0;
+  cursor: pointer;
+  inset: 0;
+  padding: 0;
+  position: absolute;
+}
+
+.app-logout-dialog__panel {
+  background: #ffffff;
+  border: 1px solid #e2bfb9;
+  border-radius: 8px;
+  box-shadow:
+    0 24px 48px rgba(11, 28, 48, 0.18),
+    0 8px 16px rgba(11, 28, 48, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+  padding: 24px;
+  position: relative;
+  width: min(100%, 420px);
+}
+
+.app-logout-dialog__panel h2 {
+  color: #300000;
+  font-size: 20px;
+  line-height: 28px;
+  margin: 0;
+}
+
+.app-logout-dialog__panel p {
+  color: #5a413d;
+  font-size: 14px;
+  line-height: 20px;
+  margin: 0;
+}
+
+.app-logout-dialog__actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  padding-top: 8px;
+}
+
+.app-logout-dialog__actions button {
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  min-height: 42px;
+  padding: 10px 12px;
+}
+
+.app-logout-dialog__actions button:first-child {
+  background: #ffffff;
+  border: 1px solid #e2bfb9;
+  color: #5a413d;
+}
+
+.app-logout-dialog__actions button:last-child {
+  background: #570000;
+  border: 1px solid #570000;
+  color: #ffffff;
+}

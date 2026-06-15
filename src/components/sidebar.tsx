@@ -39,8 +39,8 @@ const navigationItems: NavigationItem[] = [
 ];
 
 export const Sidebar = ({
-  accountDescription = "Survey Jogja Official",
-  accountName = "Admin Portal",
+  accountDescription = "Belum login",
+  accountName = "Pengguna",
   activeItem,
   avatarSrc,
   id,

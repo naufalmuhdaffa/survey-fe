@@ -19,6 +19,8 @@ const API_BASE_URL = (
 const AUTH_TOKEN_KEY = "survey_auth_token";
 
 type HomeProps = {
+  accountDescription?: string;
+  accountName?: string;
   isAuthenticated: boolean;
   onAuthAction?: () => void;
   onOpenProfile?: () => void;
@@ -224,6 +226,8 @@ const getStoredToken = () =>
   localStorage.getItem(AUTH_TOKEN_KEY) ?? sessionStorage.getItem(AUTH_TOKEN_KEY);
 
 export const Home = ({
+  accountDescription,
+  accountName,
   isAuthenticated,
   onAuthAction,
   onOpenProfile,
@@ -309,6 +313,8 @@ export const Home = ({
       />
 
       <Sidebar
+        accountDescription={accountDescription}
+        accountName={accountName}
         activeItem="Dashboard"
         avatarSrc={adminAvatar}
         id="home-sidebar"

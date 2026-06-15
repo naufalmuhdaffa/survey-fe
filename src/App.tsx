@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import "./App.css";
 import { ForgotPassword } from "./pages/auth/ForgotPassword";
 import { Login } from "./pages/auth/Login";
@@ -23,13 +23,30 @@ const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
 ).replace(/\/$/, "");
 
+type AccountProfile = {
+  full_name?: string | null;
+  username?: string | null;
+};
+
+type ProfileApiResult = {
+  data?: AccountProfile;
+};
+
 const hasStoredAuth = () =>
   Boolean(
     localStorage.getItem(AUTH_SESSION_KEY) ||
       sessionStorage.getItem(AUTH_SESSION_KEY) ||
       localStorage.getItem(AUTH_TOKEN_KEY) ||
-      sessionStorage.getItem(AUTH_TOKEN_KEY),
+    sessionStorage.getItem(AUTH_TOKEN_KEY),
   );
+
+const getStoredToken = () =>
+  localStorage.getItem(AUTH_TOKEN_KEY) ?? sessionStorage.getItem(AUTH_TOKEN_KEY);
+
+const authHeaders = (): HeadersInit => {
+  const token = getStoredToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const getResetToken = () => {
   const searchParams = new URLSearchParams(window.location.search);
@@ -55,6 +72,45 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => hasStoredAuth());
   const [resetToken, setResetToken] = useState<string | null>(() => getResetToken());
   const [authPage, setAuthPage] = useState<AuthPage>(() => getInitialAuthPage());
+  const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(
+    null,
+  );
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+
+  const loadAccountProfile = useCallback(async () => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/profile`, {
+        credentials: "include",
+        headers: authHeaders(),
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const result = (await response.json()) as ProfileApiResult;
+      setAccountProfile(result.data ?? null);
+    } catch {
+      setAccountProfile(null);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      void loadAccountProfile();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, [isAuthenticated, loadAccountProfile]);
 
   const goToLogin = () => {
     clearResetTokenFromUrl();
@@ -67,15 +123,18 @@ function App() {
     localStorage.removeItem(AUTH_TOKEN_KEY);
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    setAccountProfile(null);
   };
 
   const handleLogout = async () => {
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {
         credentials: "include",
+        headers: authHeaders(),
         method: "POST",
       });
     } finally {
+      setIsLogoutConfirmOpen(false);
       clearAuthSession();
       setIsAuthenticated(false);
       setAuthPage("home");
@@ -84,7 +143,7 @@ function App() {
 
   const handleAuthAction = () => {
     if (isAuthenticated) {
-      void handleLogout();
+      setIsLogoutConfirmOpen(true);
       return;
     }
 
@@ -97,62 +156,115 @@ function App() {
   };
 
   const handleUnauthorized = () => {
+    setIsLogoutConfirmOpen(false);
     clearAuthSession();
     setIsAuthenticated(false);
     goToLogin();
   };
 
-  if (authPage === "home") {
+  const accountName = accountProfile?.full_name?.trim() || "Pengguna";
+  const accountDescription = accountProfile?.username?.trim() || "Belum login";
+
+  const renderLogoutDialog = () => {
+    if (!isLogoutConfirmOpen) {
+      return null;
+    }
+
     return (
+      <div className="app-logout-dialog" role="presentation">
+        <button
+          aria-label="Batalkan logout"
+          className="app-logout-dialog__backdrop"
+          onClick={() => setIsLogoutConfirmOpen(false)}
+          type="button"
+        />
+        <section
+          aria-labelledby="logout-dialog-title"
+          aria-modal="true"
+          className="app-logout-dialog__panel"
+          role="dialog"
+        >
+          <h2 id="logout-dialog-title">Keluar dari akun?</h2>
+          <p>
+            Sesi login akan ditutup dan token akses akan dilepas dari perangkat
+            ini.
+          </p>
+          <div className="app-logout-dialog__actions">
+            <button onClick={() => setIsLogoutConfirmOpen(false)} type="button">
+              Batal
+            </button>
+            <button onClick={() => void handleLogout()} type="button">
+              Logout
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  const withLogoutDialog = (content: ReactNode) => (
+    <>
+      {content}
+      {renderLogoutDialog()}
+    </>
+  );
+
+  if (authPage === "home") {
+    return withLogoutDialog(
       <Home
+        accountDescription={accountDescription}
+        accountName={accountName}
         isAuthenticated={isAuthenticated}
         onAuthAction={handleAuthAction}
         onOpenProfile={() =>
           isAuthenticated ? setAuthPage("profile") : goToLogin()
         }
-      />
+      />,
     );
   }
 
   if (authPage === "profile") {
-    return (
+    return withLogoutDialog(
       <Profile
+        accountDescription={accountDescription}
+        accountName={accountName}
         isAuthenticated={isAuthenticated}
         onAuthAction={handleAuthAction}
         onBackHome={() => setAuthPage("home")}
         onOpenChangePassword={() =>
           isAuthenticated ? setAuthPage("change-password") : goToLogin()
         }
+        onProfileLoaded={setAccountProfile}
         onUnauthorized={handleUnauthorized}
-      />
+      />,
     );
   }
 
   if (authPage === "change-password") {
-    return (
+    return withLogoutDialog(
       <ChangePassword
         onBackToProfile={() => setAuthPage("profile")}
         onChangeSuccess={() => setAuthPage("profile")}
         onUnauthorized={handleUnauthorized}
-      />
+      />,
     );
   }
 
   if (authPage === "forgot-password") {
-    return <ForgotPassword onBackToLogin={goToLogin} />;
+    return withLogoutDialog(<ForgotPassword onBackToLogin={goToLogin} />);
   }
 
   if (authPage === "reset-password") {
-    return (
+    return withLogoutDialog(
       <ResetPassword
         onBackToLogin={goToLogin}
         onResetSuccess={goToLogin}
         token={resetToken}
-      />
+      />,
     );
   }
 
-  return (
+  return withLogoutDialog(
     <>
       {authPage === "login" ? (
         <Login
@@ -166,7 +278,7 @@ function App() {
           onSwitchToLogin={() => setAuthPage("login")}
         />
       )}
-    </>
+    </>,
   );
 }
 

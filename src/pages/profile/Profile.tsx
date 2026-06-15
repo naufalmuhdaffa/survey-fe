@@ -21,23 +21,36 @@ const API_BASE_URL = (
 ).replace(/\/$/, "");
 
 const AUTH_TOKEN_KEY = "survey_auth_token";
+const CONTACT_CODE_COOLDOWN_MS = 60_000;
 
 type ProfileProps = {
+  accountDescription?: string;
+  accountName?: string;
   isAuthenticated: boolean;
   onAuthAction?: () => void;
   onBackHome?: () => void;
   onOpenChangePassword?: () => void;
+  onProfileLoaded?: (profile: AccountProfile) => void;
   onUnauthorized?: () => void;
+};
+
+type AccountProfile = {
+  full_name?: string | null;
+  username?: string | null;
 };
 
 type ProfileData = {
   address: string | null;
   email: string | null;
+  email_verified?: boolean;
+  email_verified_at?: string | null;
   full_name: string;
   id: number;
   is_active: boolean;
   nik: string;
   phone: string | null;
+  phone_verified?: boolean;
+  phone_verified_at?: string | null;
   position: "asn" | "non_asn" | "public" | string;
   role: string;
   role_id: number;
@@ -50,12 +63,45 @@ type ApiResult<T> = {
 };
 
 type EditableProfileField = "email" | "phone";
+type ContactChannel = "email" | "phone";
 
 type ProfileField = {
   editable?: EditableProfileField;
+  isVerified?: boolean;
   key: string;
   label: string;
   value: string;
+  verification?: ContactChannel;
+  warning?: string;
+};
+
+type ContactVerificationState = {
+  channel: ContactChannel | null;
+  code: string;
+  cooldownUntil: number;
+  isOpen: boolean;
+  isSending: boolean;
+  isVerifying: boolean;
+  message: string;
+  type: "error" | "info" | "success";
+};
+
+type ContactVerificationModalProps = {
+  code: string;
+  description: string;
+  inputId: string;
+  isOpen: boolean;
+  isSending: boolean;
+  isVerifying: boolean;
+  message: string;
+  remainingSeconds: number;
+  title: string;
+  titleId: string;
+  type: "error" | "info" | "success";
+  onClose: () => void;
+  onCodeChange: (value: string) => void;
+  onResend: () => void;
+  onVerify: () => void;
 };
 
 const POSITION_LABELS: Record<string, string> = {
@@ -68,6 +114,17 @@ const ROLE_LABELS: Record<string, string> = {
   admin_opd: "Admin OPD",
   superadmin: "SuperAdmin",
   user: "User",
+};
+
+const initialContactVerification: ContactVerificationState = {
+  channel: null,
+  code: "",
+  cooldownUntil: 0,
+  isOpen: false,
+  isSending: false,
+  isVerifying: false,
+  message: "",
+  type: "info",
 };
 
 const getStoredToken = () =>
@@ -167,11 +224,105 @@ const validateEditableField = (
   return null;
 };
 
+const ContactVerificationModal = ({
+  code,
+  description,
+  inputId,
+  isOpen,
+  isSending,
+  isVerifying,
+  message,
+  remainingSeconds,
+  title,
+  titleId,
+  type,
+  onClose,
+  onCodeChange,
+  onResend,
+  onVerify,
+}: ContactVerificationModalProps) => {
+  if (!isOpen) {
+    return null;
+  }
+
+  const isBusy = isSending || isVerifying;
+
+  return (
+    <div className="profile-modal" role="presentation">
+      <button
+        aria-label="Tutup popup verifikasi"
+        className="profile-modal__backdrop"
+        onClick={onClose}
+        type="button"
+      />
+      <section
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className="profile-modal__panel"
+        role="dialog"
+      >
+        <header>
+          <h2 id={titleId}>{title}</h2>
+          <p>{description}</p>
+        </header>
+
+        <label className="profile-modal__field" htmlFor={inputId}>
+          <span>Kode Verifikasi</span>
+          <input
+            autoComplete="one-time-code"
+            id={inputId}
+            inputMode="numeric"
+            maxLength={6}
+            onChange={(event) =>
+              onCodeChange(event.target.value.replace(/\D/g, "").slice(0, 6))
+            }
+            placeholder="6 digit kode"
+            value={code}
+          />
+        </label>
+
+        {message && (
+          <p className={`profile-modal__message profile-modal__message--${type}`}>
+            {message}
+          </p>
+        )}
+
+        <div className="profile-modal__actions">
+          <button
+            disabled={isBusy || remainingSeconds > 0}
+            onClick={onResend}
+            type="button"
+          >
+            {remainingSeconds > 0
+              ? `Kirim ulang (${remainingSeconds}s)`
+              : "Kirim ulang"}
+          </button>
+          <button
+            className="profile-modal__primary"
+            disabled={isBusy || code.length !== 6}
+            onClick={onVerify}
+            type="button"
+          >
+            {isVerifying ? "Memeriksa..." : "Verifikasi"}
+          </button>
+        </div>
+
+        <button className="profile-modal__close" onClick={onClose} type="button">
+          Tutup
+        </button>
+      </section>
+    </div>
+  );
+};
+
 export const Profile = ({
+  accountDescription,
+  accountName,
   isAuthenticated,
   onAuthAction,
   onBackHome,
   onOpenChangePassword,
+  onProfileLoaded,
   onUnauthorized,
 }: ProfileProps) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -192,6 +343,21 @@ export const Profile = ({
   >({});
   const [savingField, setSavingField] = useState<EditableProfileField | null>(
     null,
+  );
+  const [now, setNow] = useState(() => Date.now());
+  const [contactVerification, setContactVerification] =
+    useState<ContactVerificationState>(initialContactVerification);
+
+  const applyProfile = useCallback(
+    (nextProfile: ProfileData) => {
+      setProfile(nextProfile);
+      setDrafts({
+        email: nextProfile.email ?? "",
+        phone: nextProfile.phone ?? "",
+      });
+      onProfileLoaded?.(nextProfile);
+    },
+    [onProfileLoaded],
   );
 
   const loadProfile = useCallback(async () => {
@@ -226,11 +392,7 @@ export const Profile = ({
         throw new Error("Data profil tidak ditemukan.");
       }
 
-      setProfile(result.data);
-      setDrafts({
-        email: result.data.email ?? "",
-        phone: result.data.phone ?? "",
-      });
+      applyProfile(result.data);
     } catch (error) {
       setFeedback({
         message:
@@ -242,7 +404,7 @@ export const Profile = ({
     } finally {
       setIsLoadingProfile(false);
     }
-  }, [isAuthenticated, onUnauthorized]);
+  }, [applyProfile, isAuthenticated, onUnauthorized]);
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
@@ -251,6 +413,18 @@ export const Profile = ({
 
     return () => window.clearTimeout(timerId);
   }, [loadProfile]);
+
+  useEffect(() => {
+    if (!contactVerification.isOpen || contactVerification.cooldownUntil <= now) {
+      return;
+    }
+
+    const timerId = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, [contactVerification.cooldownUntil, contactVerification.isOpen, now]);
 
   const profileFields = useMemo<ProfileField[]>(
     () => [
@@ -265,21 +439,38 @@ export const Profile = ({
         value: displayValue(profile?.nik),
       },
       {
-        editable: "email",
-        key: "email",
-        label: "Alamat Email",
-        value: displayValue(profile?.email),
-      },
-      {
-        editable: "phone",
-        key: "phone",
-        label: "Nomor Telepon",
-        value: displayValue(profile?.phone),
-      },
-      {
         key: "address",
         label: "Alamat Lengkap",
         value: displayValue(profile?.address),
+      },
+      {
+        key: "username",
+        label: "Username",
+        value: displayValue(profile?.username),
+      },
+      {
+        editable: "email",
+        isVerified: Boolean(profile?.email_verified),
+        key: "email",
+        label: "Alamat Email",
+        value: displayValue(profile?.email),
+        verification: "email",
+        warning:
+          profile?.email && !profile.email_verified
+            ? "Email belum terverifikasi. Verifikasi agar email bisa dipakai untuk reset password."
+            : undefined,
+      },
+      {
+        editable: "phone",
+        isVerified: Boolean(profile?.phone_verified),
+        key: "phone",
+        label: "Nomor Telepon",
+        value: displayValue(profile?.phone),
+        verification: "phone",
+        warning:
+          profile?.phone && !profile.phone_verified
+            ? "Nomor telepon belum terverifikasi."
+            : undefined,
       },
     ],
     [profile],
@@ -386,15 +577,12 @@ export const Profile = ({
       const result = (await response.json()) as ApiResult<ProfileData>;
 
       if (result.data) {
-        setProfile(result.data);
-        setDrafts({
-          email: result.data.email ?? "",
-          phone: result.data.phone ?? "",
-        });
+        applyProfile(result.data);
       }
 
       setEditingField(null);
       setFieldErrors({});
+      setContactVerification(initialContactVerification);
       setFeedback({
         message: result.message ?? "Profil berhasil diperbarui.",
         type: "success",
@@ -412,6 +600,146 @@ export const Profile = ({
     }
   };
 
+  const sendContactVerification = async (channel: ContactChannel) => {
+    const endpoint =
+      channel === "email"
+        ? `${API_BASE_URL}/users/profile/email/code`
+        : `${API_BASE_URL}/users/profile/phone/otp`;
+
+    setContactVerification((current) => ({
+      ...current,
+      channel,
+      isOpen: true,
+      isSending: true,
+      message:
+        channel === "email"
+          ? "Mengirim kode verifikasi email..."
+          : "Mengirim OTP nomor telepon...",
+      type: "info",
+    }));
+
+    try {
+      const response = await fetch(endpoint, {
+        credentials: "include",
+        headers: authHeaders(),
+        method: "POST",
+      });
+
+      if (response.status === 401) {
+        onUnauthorized?.();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(await getApiMessage(response));
+      }
+
+      const result = (await response.json()) as ApiResult<unknown>;
+      setNow(Date.now());
+      setContactVerification((current) => ({
+        ...current,
+        channel,
+        code: "",
+        cooldownUntil: Date.now() + CONTACT_CODE_COOLDOWN_MS,
+        isOpen: true,
+        isSending: false,
+        message:
+          result.message ??
+          (channel === "email"
+            ? "Kode verifikasi email sudah dikirim."
+            : "OTP nomor telepon sudah dikirim."),
+        type: "success",
+      }));
+    } catch (error) {
+      setContactVerification((current) => ({
+        ...current,
+        channel,
+        isOpen: true,
+        isSending: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : channel === "email"
+              ? "Kode verifikasi email gagal dikirim."
+              : "OTP nomor telepon gagal dikirim.",
+        type: "error",
+      }));
+    }
+  };
+
+  const verifyContact = async () => {
+    const channel = contactVerification.channel;
+
+    if (!channel) {
+      return;
+    }
+
+    const endpoint =
+      channel === "email"
+        ? `${API_BASE_URL}/users/profile/email/verify`
+        : `${API_BASE_URL}/users/profile/phone/verify`;
+
+    setContactVerification((current) => ({
+      ...current,
+      isVerifying: true,
+      message: "",
+    }));
+
+    try {
+      const response = await fetch(endpoint, {
+        body: JSON.stringify({
+          code: contactVerification.code,
+        }),
+        credentials: "include",
+        headers: authHeaders(true),
+        method: "POST",
+      });
+
+      if (response.status === 401) {
+        onUnauthorized?.();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(await getApiMessage(response));
+      }
+
+      const result = (await response.json()) as ApiResult<ProfileData>;
+
+      if (result.data) {
+        applyProfile(result.data);
+      }
+
+      setContactVerification(initialContactVerification);
+      setFeedback({
+        message:
+          result.message ??
+          (channel === "email"
+            ? "Email berhasil diverifikasi."
+            : "Nomor telepon berhasil diverifikasi."),
+        type: "success",
+      });
+    } catch (error) {
+      setContactVerification((current) => ({
+        ...current,
+        isVerifying: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Kode verifikasi tidak valid.",
+        type: "error",
+      }));
+    }
+  };
+
+  const handleVerificationAction = (channel: ContactChannel) => {
+    if (contactVerification.channel === channel && contactVerification.isOpen) {
+      return;
+    }
+
+    void sendContactVerification(channel);
+  };
+
   const handleOpenChangePassword = () => {
     closeSidebar();
     onOpenChangePassword?.();
@@ -420,6 +748,14 @@ export const Profile = ({
   const identityName = displayValue(profile?.full_name);
   const positionLabel = formatPosition(profile?.position ?? "");
   const roleLabel = formatRole(profile?.role ?? "user");
+  const sidebarName = profile?.full_name?.trim() || accountName || "Pengguna";
+  const sidebarDescription =
+    profile?.username?.trim() || accountDescription || "Belum login";
+  const activeChannel = contactVerification.channel ?? "email";
+  const remainingSeconds = Math.max(
+    0,
+    Math.ceil((contactVerification.cooldownUntil - now) / 1000),
+  );
 
   return (
     <main className="profile-page">
@@ -432,6 +768,8 @@ export const Profile = ({
       />
 
       <Sidebar
+        accountDescription={sidebarDescription}
+        accountName={sidebarName}
         avatarSrc={profileAvatar}
         id="profile-sidebar"
         isAuthenticated={isAuthenticated}
@@ -557,20 +895,58 @@ export const Profile = ({
                               {fieldErrors[field.editable]}
                             </p>
                           )}
+                          {field.warning && (
+                            <p className="profile-field__warning">{field.warning}</p>
+                          )}
                         </form>
                       ) : (
-                        <div className="profile-field__value">
-                          <p>{field.value}</p>
-                          {field.editable && (
-                            <button
-                              aria-label={`Ubah ${field.label}`}
-                              onClick={() => handleStartEdit(field.editable!)}
-                              type="button"
-                            >
-                              <img src={editIcon} alt="" aria-hidden="true" />
-                            </button>
+                        <>
+                          <div className="profile-field__value">
+                            <p>{field.value}</p>
+                            {(field.verification || field.editable) && (
+                              <div className="profile-field__controls">
+                                {field.verification && field.value !== "-" && (
+                                  field.isVerified ? (
+                                    <span className="profile-field__verified">
+                                      Terverifikasi
+                                    </span>
+                                  ) : (
+                                    <button
+                                      aria-label={
+                                        field.verification === "email"
+                                          ? "Verifikasi email"
+                                          : "Verifikasi nomor telepon"
+                                      }
+                                      className="profile-field__verify"
+                                      onClick={() =>
+                                        handleVerificationAction(
+                                          field.verification as ContactChannel,
+                                        )
+                                      }
+                                      type="button"
+                                    >
+                                      {field.verification === "email"
+                                        ? "Verif"
+                                        : "OTP"}
+                                    </button>
+                                  )
+                                )}
+                                {field.editable && (
+                                  <button
+                                    aria-label={`Ubah ${field.label}`}
+                                    onClick={() => handleStartEdit(field.editable!)}
+                                    type="button"
+                                  >
+                                    <img src={editIcon} alt="" aria-hidden="true" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          {field.warning && (
+                            <p className="profile-field__warning">{field.warning}</p>
                           )}
-                        </div>
+                        </>
                       )}
                     </div>
                   ))}
@@ -612,6 +988,40 @@ export const Profile = ({
           </footer>
         </div>
       </section>
+
+      <ContactVerificationModal
+        code={contactVerification.code}
+        description={
+          activeChannel === "email"
+            ? "Masukkan 6 digit kode yang dikirim ke email akun Anda."
+            : "Masukkan 6 digit OTP yang dikirim ke nomor telepon akun Anda."
+        }
+        inputId={`${activeChannel}-profile-verification-code`}
+        isOpen={contactVerification.isOpen}
+        isSending={contactVerification.isSending}
+        isVerifying={contactVerification.isVerifying}
+        message={contactVerification.message}
+        onClose={() =>
+          setContactVerification((current) => ({ ...current, isOpen: false }))
+        }
+        onCodeChange={(value) =>
+          setContactVerification((current) => ({
+            ...current,
+            code: value,
+            message: "",
+          }))
+        }
+        onResend={() => void sendContactVerification(activeChannel)}
+        onVerify={() => void verifyContact()}
+        remainingSeconds={remainingSeconds}
+        title={
+          activeChannel === "email"
+            ? "Verifikasi Email"
+            : "Verifikasi Nomor Telepon"
+        }
+        titleId={`${activeChannel}-profile-verification-title`}
+        type={contactVerification.type}
+      />
     </main>
   );
 };

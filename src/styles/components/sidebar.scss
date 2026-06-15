@@ -43,6 +43,9 @@
   strong,
   small {
     display: block;
+    max-width: 148px;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
