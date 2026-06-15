@@ -14,11 +14,8 @@ import chevronRightIcon from "../../assets/profile/profile-chevron-right.svg";
 import editIcon from "../../assets/profile/profile-edit.svg";
 import lockIcon from "../../assets/profile/profile-lock.svg";
 import profileAvatar from "../../assets/profile/profile-avatar.jpg";
+import { API_BASE_URL } from "../../lib/api";
 import "../../styles/profile/Profile.scss";
-
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
-).replace(/\/$/, "");
 
 const AUTH_TOKEN_KEY = "survey_auth_token";
 const CONTACT_CODE_COOLDOWN_MS = 60_000;

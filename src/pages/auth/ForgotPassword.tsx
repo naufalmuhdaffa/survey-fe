@@ -3,11 +3,8 @@ import backIcon from "../../assets/auth/password-reset/forgot-back-icon.svg";
 import brandIcon from "../../assets/auth/password-reset/forgot-brand-icon.svg";
 import emailIcon from "../../assets/auth/password-reset/forgot-email-icon.svg";
 import submitIcon from "../../assets/auth/password-reset/forgot-submit-icon.svg";
+import { API_BASE_URL } from "../../lib/api";
 import "../../styles/auth/PasswordReset.scss";
-
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
-).replace(/\/$/, "");
 
 type ForgotPasswordProps = {
   onBackToLogin?: () => void;

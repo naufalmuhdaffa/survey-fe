@@ -3,11 +3,8 @@ import backIcon from "../../assets/auth/password-reset/forgot-back-icon.svg";
 import eyeIcon from "../../assets/auth/password-reset/reset-eye-icon.svg";
 import headerIcon from "../../assets/auth/password-reset/reset-header-icon.svg";
 import submitIcon from "../../assets/auth/password-reset/reset-submit-icon.svg";
+import { API_BASE_URL } from "../../lib/api";
 import "../../styles/auth/PasswordReset.scss";
-
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
-).replace(/\/$/, "");
 
 const AUTH_TOKEN_KEY = "survey_auth_token";
 

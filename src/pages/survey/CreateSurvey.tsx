@@ -16,11 +16,8 @@ import stepCheckIcon from "../../assets/survey/create/create-step-check.svg";
 import targetIcon from "../../assets/survey/create/create-target.svg";
 import uploadIcon from "../../assets/survey/create/create-upload.svg";
 import defaultThumbnailPreview from "../../assets/survey/create-thumbnail-preview.png";
+import { API_BASE_URL } from "../../lib/api";
 import "../../styles/survey/CreateSurvey.scss";
-
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
-).replace(/\/$/, "");
 
 const AUTH_TOKEN_KEY = "survey_auth_token";
 const DRAFT_STORAGE_KEY = "survey_create_draft";

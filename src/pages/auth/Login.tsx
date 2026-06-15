@@ -4,11 +4,8 @@ import eyeIcon from "../../assets/auth/login/login-eye-icon.svg";
 import floatingIcon from "../../assets/auth/login/login-floating-icon.svg";
 import nikIcon from "../../assets/auth/login/login-nik-icon.svg";
 import passwordIcon from "../../assets/auth/login/login-password-icon.svg";
+import { API_BASE_URL } from "../../lib/api";
 import "../../styles/auth/Login.scss";
-
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
-).replace(/\/$/, "");
 
 const AUTH_SESSION_KEY = "survey_auth_session";
 const AUTH_TOKEN_KEY = "survey_auth_token";

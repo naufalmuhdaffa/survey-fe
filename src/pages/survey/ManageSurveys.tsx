@@ -6,11 +6,8 @@ import editIcon from "../../assets/profile/profile-edit.svg";
 import limitIcon from "../../assets/survey/manage-limit-icon.svg";
 import searchIcon from "../../assets/survey/manage-search-icon.svg";
 import trashIcon from "../../assets/survey/manage-trash-icon.svg";
+import { API_BASE_URL } from "../../lib/api";
 import "../../styles/survey/ManageSurveys.scss";
-
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
-).replace(/\/$/, "");
 
 const AUTH_TOKEN_KEY = "survey_auth_token";
 const PER_PAGE_OPTIONS = [5, 10, 25, 50] as const;

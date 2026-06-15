@@ -10,11 +10,8 @@ import stepLoginIcon from "../../assets/home/home-step-login.svg";
 import stepSurveyIcon from "../../assets/home/home-step-survey.svg";
 import surveyIllustration from "../../assets/home/home-survey-illustration.png";
 import transJogjaBus from "../../assets/home/home-trans-jogja-bus.png";
+import { API_BASE_URL } from "../../lib/api";
 import "../../styles/home/Home.scss";
-
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
-).replace(/\/$/, "");
 
 const AUTH_TOKEN_KEY = "survey_auth_token";
 

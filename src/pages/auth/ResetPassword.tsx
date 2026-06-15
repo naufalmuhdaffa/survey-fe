@@ -2,11 +2,8 @@ import { type FormEvent, useState } from "react";
 import eyeIcon from "../../assets/auth/password-reset/reset-eye-icon.svg";
 import headerIcon from "../../assets/auth/password-reset/reset-header-icon.svg";
 import submitIcon from "../../assets/auth/password-reset/reset-submit-icon.svg";
+import { API_BASE_URL } from "../../lib/api";
 import "../../styles/auth/PasswordReset.scss";
-
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
-).replace(/\/$/, "");
 
 type ResetPasswordProps = {
   onBackToLogin?: () => void;

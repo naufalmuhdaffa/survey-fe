@@ -9,6 +9,7 @@ import { ChangePassword } from "./pages/profile/ChangePassword";
 import { Profile } from "./pages/profile/Profile";
 import { CreateSurvey } from "./pages/survey/CreateSurvey";
 import { ManageSurveys } from "./pages/survey/ManageSurveys";
+import { API_BASE_URL } from "./lib/api";
 
 type AuthPage =
   | "change-password"
@@ -23,9 +24,6 @@ type AuthPage =
 
 const AUTH_SESSION_KEY = "survey_auth_session";
 const AUTH_TOKEN_KEY = "survey_auth_token";
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
-).replace(/\/$/, "");
 
 type AccountProfile = {
   full_name?: string | null;

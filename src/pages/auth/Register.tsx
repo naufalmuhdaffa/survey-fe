@@ -14,11 +14,8 @@ import passwordIcon from "../../assets/auth/register/register-password-icon.svg"
 import phoneIcon from "../../assets/auth/register/register-phone-icon.svg";
 import submitIcon from "../../assets/auth/register/register-submit-icon.svg";
 import userIcon from "../../assets/auth/register/register-user-icon.svg";
+import { API_BASE_URL } from "../../lib/api";
 import "../../styles/auth/Register.scss";
-
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://survey-general-api.test"
-).replace(/\/$/, "");
 
 const AUTH_SESSION_KEY = "survey_auth_session";
 const AUTH_TOKEN_KEY = "survey_auth_token";
