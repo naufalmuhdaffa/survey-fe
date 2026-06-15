@@ -50,9 +50,7 @@ const PAGE_PATHS: Record<AuthPage, string> = {
 
 const hasStoredAuth = () =>
   Boolean(
-    localStorage.getItem(AUTH_SESSION_KEY) ||
-      sessionStorage.getItem(AUTH_SESSION_KEY) ||
-      localStorage.getItem(AUTH_TOKEN_KEY) ||
+    localStorage.getItem(AUTH_TOKEN_KEY) ||
       sessionStorage.getItem(AUTH_TOKEN_KEY),
   );
 

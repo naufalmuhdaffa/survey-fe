@@ -2,6 +2,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "../../components/sidebar";
 import { Topbar } from "../../components/topbar";
 import adminAvatar from "../../assets/home/home-admin-avatar.png";
+import addOptionIcon from "../../assets/survey/create/create-add-option.svg";
+import arrowLeftIcon from "../../assets/survey/create/create-arrow-left.svg";
+import arrowRightIcon from "../../assets/survey/create/create-arrow-right.svg";
+import calendarIcon from "../../assets/survey/create/create-calendar.svg";
+import deleteIcon from "../../assets/survey/create/create-delete.svg";
+import editIcon from "../../assets/survey/create/create-edit.svg";
+import emptyQuestionIcon from "../../assets/survey/create/create-empty-question.svg";
+import infoIcon from "../../assets/survey/create/create-info.svg";
+import plusIcon from "../../assets/survey/create/create-plus.svg";
+import publishIcon from "../../assets/survey/create/create-publish.svg";
+import stepCheckIcon from "../../assets/survey/create/create-step-check.svg";
+import targetIcon from "../../assets/survey/create/create-target.svg";
+import uploadIcon from "../../assets/survey/create/create-upload.svg";
 import defaultThumbnailPreview from "../../assets/survey/create-thumbnail-preview.png";
 import "../../styles/survey/CreateSurvey.scss";
 
@@ -959,7 +972,9 @@ export const CreateSurvey = ({
       aria-labelledby="survey-info-title"
     >
       <div className="create-survey-card__header">
-        <span aria-hidden="true">i</span>
+        <span aria-hidden="true">
+          <img src={infoIcon} alt="" />
+        </span>
         <div>
           <h2 id="survey-info-title">1. Informasi Umum</h2>
         </div>
@@ -1017,7 +1032,9 @@ export const CreateSurvey = ({
                 }
                 type="file"
               />
-              <span aria-hidden="true" />
+              <span aria-hidden="true">
+                <img src={uploadIcon} alt="" />
+              </span>
               <strong>Pilih File</strong>
               <small>atau seret gambar ke sini</small>
             </label>
@@ -1037,7 +1054,7 @@ export const CreateSurvey = ({
     >
       <div className="create-settings-card">
         <header>
-          <span aria-hidden="true" />
+          <img src={calendarIcon} alt="" aria-hidden="true" />
           <h2>Jadwal Survey</h2>
         </header>
         <div className="create-settings-card__grid">
@@ -1083,7 +1100,7 @@ export const CreateSurvey = ({
 
       <div className="create-settings-card">
         <header>
-          <span aria-hidden="true" />
+          <img src={targetIcon} alt="" aria-hidden="true" />
           <h2>Target Responden</h2>
         </header>
         <div className="create-survey-audience">
@@ -1147,6 +1164,7 @@ export const CreateSurvey = ({
             {savingQuestionId === question.localId ? "Menyimpan..." : "Simpan"}
           </button>
           <button onClick={() => void deleteQuestion(question)} type="button">
+            <img src={deleteIcon} alt="" aria-hidden="true" />
             Hapus
           </button>
         </div>
@@ -1241,11 +1259,13 @@ export const CreateSurvey = ({
                 onClick={() => void removeOption(question.localId, option)}
                 type="button"
               >
+                <img src={deleteIcon} alt="" aria-hidden="true" />
                 Hapus
               </button>
             </div>
           ))}
           <button onClick={() => addOption(question.localId)} type="button">
+            <img src={addOptionIcon} alt="" aria-hidden="true" />
             Tambah Opsi
           </button>
         </div>
@@ -1274,7 +1294,7 @@ export const CreateSurvey = ({
           onClick={addQuestionPage}
           type="button"
         >
-          +
+          <img src={plusIcon} alt="" aria-hidden="true" />
         </button>
       </div>
 
@@ -1283,7 +1303,7 @@ export const CreateSurvey = ({
           Pertanyaan Kuesioner (Halaman {activePage})
         </h2>
         <button aria-label="Ubah section" type="button">
-          <span aria-hidden="true" />
+          <img src={editIcon} alt="" aria-hidden="true" />
         </button>
       </div>
 
@@ -1298,14 +1318,16 @@ export const CreateSurvey = ({
 
       {currentPageQuestions.length === 0 ? (
         <div className="create-question-empty">
-          <span aria-hidden="true" />
+          <span aria-hidden="true">
+            <img src={emptyQuestionIcon} alt="" />
+          </span>
           <strong>Belum ada pertanyaan</strong>
           <p>
             Tambahkan pertanyaan baru ke dalam bagian ini untuk mengelompokkan
             kuesioner Anda.
           </p>
           <button onClick={addQuestion} type="button">
-            <span aria-hidden="true">+</span>
+            <img src={plusIcon} alt="" aria-hidden="true" />
             Tambah Pertanyaan
           </button>
         </div>
@@ -1313,7 +1335,7 @@ export const CreateSurvey = ({
         <div className="create-question-list">
           {currentPageQuestions.map(renderQuestionCard)}
           <button className="create-question-add" onClick={addQuestion} type="button">
-            <span aria-hidden="true">+</span>
+            <img src={plusIcon} alt="" aria-hidden="true" />
             Tambah Pertanyaan
           </button>
         </div>
@@ -1333,7 +1355,7 @@ export const CreateSurvey = ({
           onClick={() => void leaveBuilder()}
           type="button"
         >
-          <span aria-hidden="true">{"<"}</span>
+          <img src={arrowLeftIcon} alt="" aria-hidden="true" />
           Kembali ke Daftar Survey
         </button>
       );
@@ -1368,7 +1390,9 @@ export const CreateSurvey = ({
             onClick={() => void goToStep(stepNumber)}
             type="button"
           >
-            <span aria-hidden="true">{isComplete ? "" : stepNumber}</span>
+            <span aria-hidden="true">
+              {isComplete ? <img src={stepCheckIcon} alt="" /> : stepNumber}
+            </span>
             {stepNumber === 1
               ? "Informasi Umum"
               : stepNumber === 2
@@ -1440,6 +1464,7 @@ export const CreateSurvey = ({
               }
               type="button"
             >
+              {step !== 1 && <img src={arrowLeftIcon} alt="" aria-hidden="true" />}
               {step === 1 ? "Batal" : "Kembali"}
             </button>
             <div>
@@ -1456,7 +1481,14 @@ export const CreateSurvey = ({
                 onClick={() => void goToStep((step + 1) as BuilderStep)}
                 type="button"
               >
-                {isSaving ? "Menyimpan..." : "Selanjutnya ->"}
+                {isSaving ? (
+                  "Menyimpan..."
+                ) : (
+                  <>
+                    Selanjutnya
+                    <img src={arrowRightIcon} alt="" aria-hidden="true" />
+                  </>
+                )}
               </button>
             ) : (
               <button
@@ -1464,7 +1496,14 @@ export const CreateSurvey = ({
                 onClick={() => void publishSurvey()}
                 type="button"
               >
-                {isSaving ? "Mempublikasikan..." : "Publikasikan Survey >"}
+                {isSaving ? (
+                  "Mempublikasikan..."
+                ) : (
+                  <>
+                    Publikasikan Survey
+                    <img src={publishIcon} alt="" aria-hidden="true" />
+                  </>
+                )}
               </button>
             )}
             </div>

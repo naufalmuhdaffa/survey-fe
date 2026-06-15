@@ -21,8 +21,10 @@ type LoginProps = {
 
 type ApiResult = {
   data?: {
+    access_token?: string;
     token?: string;
   };
+  access_token?: string;
   message?: string;
   token?: string;
 };
@@ -36,7 +38,8 @@ const getApiMessage = async (response: Response) => {
   }
 };
 
-const getToken = (result: ApiResult) => result.token ?? result.data?.token;
+const getToken = (result: ApiResult) =>
+  result.token ?? result.access_token ?? result.data?.token ?? result.data?.access_token;
 
 const persistAuthSession = (result: ApiResult, rememberMe: boolean) => {
   localStorage.removeItem(AUTH_SESSION_KEY);
@@ -47,11 +50,12 @@ const persistAuthSession = (result: ApiResult, rememberMe: boolean) => {
   const storage = rememberMe ? localStorage : sessionStorage;
   const token = getToken(result);
 
-  storage.setItem(AUTH_SESSION_KEY, "1");
-
-  if (token) {
-    storage.setItem(AUTH_TOKEN_KEY, token);
+  if (!token) {
+    throw new Error("Token login tidak diterima dari server.");
   }
+
+  storage.setItem(AUTH_SESSION_KEY, "1");
+  storage.setItem(AUTH_TOKEN_KEY, token);
 };
 
 export const Login = ({

@@ -113,11 +113,13 @@ type LegalInfoModalProps = {
 
 type ApiResult = {
   data?: {
+    access_token?: string;
     address?: string | null;
     name?: string;
     position?: string;
     token?: string;
   };
+  access_token?: string;
   message?: string;
   token?: string;
 };
@@ -155,7 +157,8 @@ const getApiMessage = async (response: Response) => {
   }
 };
 
-const getToken = (result: ApiResult) => result.token ?? result.data?.token;
+const getToken = (result: ApiResult) =>
+  result.token ?? result.access_token ?? result.data?.token ?? result.data?.access_token;
 
 const persistAuthSession = (result: ApiResult) => {
   localStorage.removeItem(AUTH_SESSION_KEY);
@@ -164,11 +167,12 @@ const persistAuthSession = (result: ApiResult) => {
 
   const token = getToken(result);
 
-  if (token) {
-    sessionStorage.setItem(AUTH_TOKEN_KEY, token);
-  } else {
-    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+  if (!token) {
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+    throw new Error("Token registrasi tidak diterima dari server.");
   }
+
+  sessionStorage.setItem(AUTH_TOKEN_KEY, token);
 };
 
 const getPositionLabel = (position: string) => {

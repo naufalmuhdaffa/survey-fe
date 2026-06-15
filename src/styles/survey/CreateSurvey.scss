@@ -98,8 +98,17 @@
   padding: 0 0 4px;
 
   span {
-    font-size: 14px;
-    line-height: 14px;
+    align-items: center;
+    display: inline-flex;
+    height: 12px;
+    justify-content: center;
+    width: 12px;
+  }
+
+  img {
+    display: block;
+    height: 12px;
+    width: 12px;
   }
 
   &:hover,
@@ -193,12 +202,13 @@
     }
 
     &.is-complete > span::before {
-      border: solid #ffffff;
-      border-width: 0 2px 2px 0;
-      content: "";
+      content: none;
+    }
+
+    &.is-complete > span img {
+      display: block;
       height: 12px;
-      transform: rotate(45deg);
-      width: 6px;
+      width: 15px;
     }
 
     &.is-complete > i {
@@ -275,6 +285,12 @@
     justify-content: center;
     line-height: 24px;
     width: 40px;
+
+    img {
+      display: block;
+      height: 20px;
+      width: 20px;
+    }
   }
 
   h2 {
@@ -449,23 +465,17 @@
   }
 
   > span {
-    border: 3px solid var(--create-muted);
-    border-bottom-color: transparent;
-    border-radius: 16px 16px 8px 8px;
-    height: 24px;
+    align-items: center;
+    display: inline-flex;
+    height: 40px;
+    justify-content: center;
     margin-bottom: 12px;
-    position: relative;
-    width: 38px;
+    width: 44px;
 
-    &::after {
-      border-left: 7px solid transparent;
-      border-right: 7px solid transparent;
-      border-top: 8px solid var(--create-muted);
-      content: "";
-      left: 50%;
-      position: absolute;
-      top: 7px;
-      transform: translateX(-50%) rotate(180deg);
+    img {
+      display: block;
+      height: 40px;
+      width: 44px;
     }
   }
 
@@ -567,12 +577,13 @@
     width: 32px;
 
     span {
-      border-bottom: 2px solid var(--create-muted);
-      border-right: 2px solid var(--create-muted);
+      display: none;
+    }
+
+    img {
       display: block;
-      height: 12px;
-      transform: rotate(-45deg);
-      width: 12px;
+      height: 15px;
+      width: 15px;
     }
 
     &:hover,
@@ -633,12 +644,10 @@
     justify-content: center;
     width: 64px;
 
-    &::before {
-      border: 2px solid var(--create-muted);
-      border-radius: 2px;
-      content: "";
-      height: 24px;
-      width: 20px;
+    img {
+      display: block;
+      height: 27px;
+      width: 27px;
     }
   }
 
@@ -792,32 +801,11 @@
     display: flex;
     gap: 8px;
 
-    span {
+    > img {
       display: block;
-      height: 18px;
-      position: relative;
-      width: 18px;
-
-      &::before,
-      &::after {
-        background: var(--create-maroon-dark);
-        content: "";
-        position: absolute;
-      }
-
-      &::before {
-        height: 16px;
-        left: 3px;
-        top: 1px;
-        width: 12px;
-      }
-
-      &::after {
-        height: 2px;
-        left: 0;
-        top: 5px;
-        width: 18px;
-      }
+      max-height: 20px;
+      object-fit: contain;
+      width: 24px;
     }
 
     h2 {
@@ -934,6 +922,14 @@
     border-color: var(--create-maroon-dark);
     outline: none;
   }
+
+  img {
+    display: block;
+    flex: 0 0 auto;
+    height: 14px;
+    object-fit: contain;
+    width: 14px;
+  }
 }
 
 .create-survey-footer > button,
@@ -960,6 +956,14 @@
   &:focus-visible {
     background: rgba(226, 191, 185, 0.16);
     outline: none;
+  }
+
+  img {
+    display: block;
+    flex: 0 0 auto;
+    height: 14px;
+    object-fit: contain;
+    width: 14px;
   }
 }
 
