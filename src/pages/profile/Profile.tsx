@@ -62,7 +62,7 @@ type ApiResult<T> = {
   message?: string;
 };
 
-type EditableProfileField = "email" | "phone";
+type EditableProfileField = "email" | "phone" | "username";
 type ContactChannel = "email" | "phone";
 
 type ProfileField = {
@@ -180,6 +180,22 @@ const validateEditableField = (
 ) => {
   const trimmedValue = value.trim();
 
+  if (field === "username") {
+    if (!trimmedValue) {
+      return "Username harus diisi.";
+    }
+
+    if (trimmedValue.length > 25) {
+      return "Username maksimal 25 karakter.";
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmedValue)) {
+      return "Username hanya boleh huruf, angka, dan underscore.";
+    }
+
+    return null;
+  }
+
   if (trimmedValue === "") {
     return null;
   }
@@ -222,6 +238,30 @@ const validateEditableField = (
   }
 
   return null;
+};
+
+const getEditableFieldAutoComplete = (field: EditableProfileField) => {
+  if (field === "username") {
+    return "username";
+  }
+
+  return field === "email" ? "email" : "tel";
+};
+
+const getEditableFieldInputMode = (field: EditableProfileField) => {
+  if (field === "username") {
+    return "text";
+  }
+
+  return field === "email" ? "email" : "tel";
+};
+
+const getEditableFieldType = (field: EditableProfileField) => {
+  if (field === "username") {
+    return "text";
+  }
+
+  return field === "email" ? "email" : "tel";
 };
 
 const ContactVerificationModal = ({
@@ -337,6 +377,7 @@ export const Profile = ({
   const [drafts, setDrafts] = useState<Record<EditableProfileField, string>>({
     email: "",
     phone: "",
+    username: "",
   });
   const [fieldErrors, setFieldErrors] = useState<
     Partial<Record<EditableProfileField, string>>
@@ -354,6 +395,7 @@ export const Profile = ({
       setDrafts({
         email: nextProfile.email ?? "",
         phone: nextProfile.phone ?? "",
+        username: nextProfile.username ?? "",
       });
       onProfileLoaded?.(nextProfile);
     },
@@ -444,6 +486,7 @@ export const Profile = ({
         value: displayValue(profile?.address),
       },
       {
+        editable: "username",
         key: "username",
         label: "Username",
         value: displayValue(profile?.username),
@@ -521,6 +564,7 @@ export const Profile = ({
     setDrafts({
       email: profile?.email ?? "",
       phone: profile?.phone ?? "",
+      username: profile?.username ?? "",
     });
   };
 
@@ -861,16 +905,14 @@ export const Profile = ({
                         >
                           <input
                             aria-label={field.label}
-                            autoComplete={
-                              field.editable === "email" ? "email" : "tel"
-                            }
-                            inputMode={
-                              field.editable === "email" ? "email" : "tel"
-                            }
+                            autoComplete={getEditableFieldAutoComplete(
+                              field.editable,
+                            )}
+                            inputMode={getEditableFieldInputMode(field.editable)}
                             onChange={(event) =>
                               handleDraftChange(field.editable!, event.target.value)
                             }
-                            type={field.editable === "email" ? "email" : "tel"}
+                            type={getEditableFieldType(field.editable)}
                             value={drafts[field.editable]}
                           />
                           <div className="profile-field__actions">
