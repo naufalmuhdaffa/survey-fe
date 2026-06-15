@@ -30,6 +30,7 @@ type ProfileProps = {
   onAuthAction?: () => void;
   onBackHome?: () => void;
   onOpenChangePassword?: () => void;
+  onOpenManageSurveys?: () => void;
   onProfileLoaded?: (profile: AccountProfile) => void;
   onUnauthorized?: () => void;
 };
@@ -362,6 +363,7 @@ export const Profile = ({
   onAuthAction,
   onBackHome,
   onOpenChangePassword,
+  onOpenManageSurveys,
   onProfileLoaded,
   onUnauthorized,
 }: ProfileProps) => {
@@ -537,6 +539,10 @@ export const Profile = ({
 
     if (label === "Dashboard") {
       onBackHome?.();
+    }
+
+    if (label === "Kelola Survey") {
+      onOpenManageSurveys?.();
     }
   };
 

@@ -23,6 +23,7 @@ type HomeProps = {
   accountName?: string;
   isAuthenticated: boolean;
   onAuthAction?: () => void;
+  onOpenManageSurveys?: () => void;
   onOpenProfile?: () => void;
 };
 
@@ -230,6 +231,7 @@ export const Home = ({
   accountName,
   isAuthenticated,
   onAuthAction,
+  onOpenManageSurveys,
   onOpenProfile,
 }: HomeProps) => {
   const [surveys, setSurveys] = useState<SurveyCard[]>([]);
@@ -292,8 +294,12 @@ export const Home = ({
     onOpenProfile?.();
   };
 
-  const handleSidebarNavigation = () => {
+  const handleSidebarNavigation = (label: string) => {
     closeSidebar();
+
+    if (label === "Kelola Survey") {
+      onOpenManageSurveys?.();
+    }
   };
 
   const handleAuthAction = () => {

@@ -7,12 +7,14 @@ import { ResetPassword } from "./pages/auth/ResetPassword";
 import { Home } from "./pages/home/Home";
 import { ChangePassword } from "./pages/profile/ChangePassword";
 import { Profile } from "./pages/profile/Profile";
+import { ManageSurveys } from "./pages/survey/ManageSurveys";
 
 type AuthPage =
   | "change-password"
   | "forgot-password"
   | "home"
   | "login"
+  | "manage-surveys"
   | "profile"
   | "register"
   | "reset-password";
@@ -37,6 +39,7 @@ const PAGE_PATHS: Record<AuthPage, string> = {
   "forgot-password": "/forgot-password",
   home: "/",
   login: "/login",
+  "manage-surveys": "/surveys/manage",
   profile: "/profile",
   register: "/register",
   "reset-password": "/reset-password",
@@ -72,7 +75,8 @@ const getInitialAuthPage = (): AuthPage => {
 
   if (
     (normalizedPath === PAGE_PATHS.profile ||
-      normalizedPath === PAGE_PATHS["change-password"]) &&
+      normalizedPath === PAGE_PATHS["change-password"] ||
+      normalizedPath === PAGE_PATHS["manage-surveys"]) &&
     !hasStoredAuth()
   ) {
     return "login";
@@ -84,6 +88,10 @@ const getInitialAuthPage = (): AuthPage => {
 
   if (normalizedPath === PAGE_PATHS["change-password"]) {
     return "change-password";
+  }
+
+  if (normalizedPath === PAGE_PATHS["manage-surveys"]) {
+    return "manage-surveys";
   }
 
   if (normalizedPath === PAGE_PATHS.login) {
@@ -275,6 +283,15 @@ function App() {
     goToLogin();
   }, [goToLogin, isAuthenticated, navigate]);
 
+  const openManageSurveys = useCallback(() => {
+    if (isAuthenticated) {
+      navigate("manage-surveys");
+      return;
+    }
+
+    goToLogin();
+  }, [goToLogin, isAuthenticated, navigate]);
+
   const openForgotPassword = useCallback(() => {
     navigate("forgot-password");
   }, [navigate]);
@@ -337,6 +354,7 @@ function App() {
         accountName={accountName}
         isAuthenticated={isAuthenticated}
         onAuthAction={handleAuthAction}
+        onOpenManageSurveys={openManageSurveys}
         onOpenProfile={openProfile}
       />,
     );
@@ -351,7 +369,22 @@ function App() {
         onAuthAction={handleAuthAction}
         onBackHome={openHome}
         onOpenChangePassword={openChangePassword}
+        onOpenManageSurveys={openManageSurveys}
         onProfileLoaded={setAccountProfile}
+        onUnauthorized={handleUnauthorized}
+      />,
+    );
+  }
+
+  if (authPage === "manage-surveys") {
+    return withLogoutDialog(
+      <ManageSurveys
+        accountDescription={accountDescription}
+        accountName={accountName}
+        isAuthenticated={isAuthenticated}
+        onAuthAction={handleAuthAction}
+        onBackHome={openHome}
+        onOpenProfile={openProfile}
         onUnauthorized={handleUnauthorized}
       />,
     );
