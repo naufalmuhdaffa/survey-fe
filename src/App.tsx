@@ -7,10 +7,12 @@ import { ResetPassword } from "./pages/auth/ResetPassword";
 import { Home } from "./pages/home/Home";
 import { ChangePassword } from "./pages/profile/ChangePassword";
 import { Profile } from "./pages/profile/Profile";
+import { CreateSurvey } from "./pages/survey/CreateSurvey";
 import { ManageSurveys } from "./pages/survey/ManageSurveys";
 
 type AuthPage =
   | "change-password"
+  | "create-survey"
   | "forgot-password"
   | "home"
   | "login"
@@ -36,6 +38,7 @@ type ProfileApiResult = {
 
 const PAGE_PATHS: Record<AuthPage, string> = {
   "change-password": "/profile/change-password",
+  "create-survey": "/surveys/create",
   "forgot-password": "/forgot-password",
   home: "/",
   login: "/login",
@@ -76,6 +79,7 @@ const getInitialAuthPage = (): AuthPage => {
   if (
     (normalizedPath === PAGE_PATHS.profile ||
       normalizedPath === PAGE_PATHS["change-password"] ||
+      normalizedPath === PAGE_PATHS["create-survey"] ||
       normalizedPath === PAGE_PATHS["manage-surveys"]) &&
     !hasStoredAuth()
   ) {
@@ -88,6 +92,10 @@ const getInitialAuthPage = (): AuthPage => {
 
   if (normalizedPath === PAGE_PATHS["change-password"]) {
     return "change-password";
+  }
+
+  if (normalizedPath === PAGE_PATHS["create-survey"]) {
+    return "create-survey";
   }
 
   if (normalizedPath === PAGE_PATHS["manage-surveys"]) {
@@ -292,6 +300,15 @@ function App() {
     goToLogin();
   }, [goToLogin, isAuthenticated, navigate]);
 
+  const openCreateSurvey = useCallback(() => {
+    if (isAuthenticated) {
+      navigate("create-survey");
+      return;
+    }
+
+    goToLogin();
+  }, [goToLogin, isAuthenticated, navigate]);
+
   const openForgotPassword = useCallback(() => {
     navigate("forgot-password");
   }, [navigate]);
@@ -384,6 +401,22 @@ function App() {
         isAuthenticated={isAuthenticated}
         onAuthAction={handleAuthAction}
         onBackHome={openHome}
+        onCreateSurvey={openCreateSurvey}
+        onOpenProfile={openProfile}
+        onUnauthorized={handleUnauthorized}
+      />,
+    );
+  }
+
+  if (authPage === "create-survey") {
+    return withLogoutDialog(
+      <CreateSurvey
+        accountDescription={accountDescription}
+        accountName={accountName}
+        isAuthenticated={isAuthenticated}
+        onAuthAction={handleAuthAction}
+        onBackHome={openHome}
+        onOpenManageSurveys={openManageSurveys}
         onOpenProfile={openProfile}
         onUnauthorized={handleUnauthorized}
       />,

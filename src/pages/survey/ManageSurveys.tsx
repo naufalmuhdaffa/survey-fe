@@ -21,6 +21,7 @@ type ManageSurveysProps = {
   isAuthenticated: boolean;
   onAuthAction?: () => void;
   onBackHome?: () => void;
+  onCreateSurvey?: () => void;
   onOpenProfile?: () => void;
   onUnauthorized?: () => void;
 };
@@ -322,6 +323,7 @@ export const ManageSurveys = ({
   isAuthenticated,
   onAuthAction,
   onBackHome,
+  onCreateSurvey,
   onOpenProfile,
   onUnauthorized,
 }: ManageSurveysProps) => {
@@ -537,9 +539,7 @@ export const ManageSurveys = ({
 
             <button
               className="manage-survey-create"
-              onClick={() =>
-                setFeedbackMessage("Halaman buat survey baru belum tersedia.")
-              }
+              onClick={onCreateSurvey}
               type="button"
             >
               <span aria-hidden="true">+</span>
