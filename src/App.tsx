@@ -32,12 +32,22 @@ type ProfileApiResult = {
   data?: AccountProfile;
 };
 
+const PAGE_PATHS: Record<AuthPage, string> = {
+  "change-password": "/profile/change-password",
+  "forgot-password": "/forgot-password",
+  home: "/",
+  login: "/login",
+  profile: "/profile",
+  register: "/register",
+  "reset-password": "/reset-password",
+};
+
 const hasStoredAuth = () =>
   Boolean(
     localStorage.getItem(AUTH_SESSION_KEY) ||
       sessionStorage.getItem(AUTH_SESSION_KEY) ||
       localStorage.getItem(AUTH_TOKEN_KEY) ||
-    sessionStorage.getItem(AUTH_TOKEN_KEY),
+      sessionStorage.getItem(AUTH_TOKEN_KEY),
   );
 
 const getStoredToken = () =>
@@ -58,14 +68,73 @@ const getInitialAuthPage = (): AuthPage => {
     return "reset-password";
   }
 
+  const normalizedPath = window.location.pathname.replace(/\/+$/, "") || "/";
+
+  if (
+    (normalizedPath === PAGE_PATHS.profile ||
+      normalizedPath === PAGE_PATHS["change-password"]) &&
+    !hasStoredAuth()
+  ) {
+    return "login";
+  }
+
+  if (normalizedPath === PAGE_PATHS.profile) {
+    return "profile";
+  }
+
+  if (normalizedPath === PAGE_PATHS["change-password"]) {
+    return "change-password";
+  }
+
+  if (normalizedPath === PAGE_PATHS.login) {
+    return "login";
+  }
+
+  if (normalizedPath === PAGE_PATHS.register) {
+    return "register";
+  }
+
+  if (normalizedPath === PAGE_PATHS["forgot-password"]) {
+    return "forgot-password";
+  }
+
+  if (normalizedPath === PAGE_PATHS["reset-password"]) {
+    return "reset-password";
+  }
+
   return "home";
 };
 
-const clearResetTokenFromUrl = () => {
+const syncUrl = (page: AuthPage, replace = false) => {
   const url = new URL(window.location.href);
+  url.pathname = PAGE_PATHS[page];
+
+  if (page !== "reset-password") {
+    url.searchParams.delete("reset_token");
+    url.searchParams.delete("token");
+  }
+
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+  if (nextUrl === currentUrl) {
+    return;
+  }
+
+  if (replace) {
+    window.history.replaceState({}, "", nextUrl);
+    return;
+  }
+
+  window.history.pushState({}, "", nextUrl);
+};
+
+const clearResetTokenFromUrl = (page: AuthPage = getInitialAuthPage()) => {
+  const url = new URL(window.location.href);
+  url.pathname = PAGE_PATHS[page];
   url.searchParams.delete("reset_token");
   url.searchParams.delete("token");
-  window.history.replaceState({}, "", url);
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
 };
 
 function App() {
@@ -76,6 +145,28 @@ function App() {
     null,
   );
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    syncUrl(authPage, true);
+
+    const handlePopState = () => {
+      const nextResetToken = getResetToken();
+      setResetToken(nextResetToken);
+      setAuthPage(getInitialAuthPage());
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [authPage]);
+
+  const navigate = useCallback((page: AuthPage, replace = false) => {
+    if (page !== "reset-password") {
+      setResetToken(null);
+    }
+
+    setAuthPage(page);
+    syncUrl(page, replace);
+  }, []);
 
   const loadAccountProfile = useCallback(async () => {
     if (!isAuthenticated) {
@@ -112,21 +203,21 @@ function App() {
     return () => window.clearTimeout(timerId);
   }, [isAuthenticated, loadAccountProfile]);
 
-  const goToLogin = () => {
-    clearResetTokenFromUrl();
+  const goToLogin = useCallback(() => {
+    clearResetTokenFromUrl("login");
     setResetToken(null);
-    setAuthPage("login");
-  };
+    navigate("login", true);
+  }, [navigate]);
 
-  const clearAuthSession = () => {
+  const clearAuthSession = useCallback(() => {
     localStorage.removeItem(AUTH_SESSION_KEY);
     localStorage.removeItem(AUTH_TOKEN_KEY);
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem(AUTH_TOKEN_KEY);
     setAccountProfile(null);
-  };
+  }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {
         credentials: "include",
@@ -137,30 +228,60 @@ function App() {
       setIsLogoutConfirmOpen(false);
       clearAuthSession();
       setIsAuthenticated(false);
-      setAuthPage("home");
+      navigate("home", true);
     }
-  };
+  }, [clearAuthSession, navigate]);
 
-  const handleAuthAction = () => {
+  const handleAuthAction = useCallback(() => {
     if (isAuthenticated) {
       setIsLogoutConfirmOpen(true);
       return;
     }
 
     goToLogin();
-  };
+  }, [goToLogin, isAuthenticated]);
 
-  const handleAuthenticated = () => {
+  const handleAuthenticated = useCallback(() => {
     setIsAuthenticated(true);
-    setAuthPage("home");
-  };
+    navigate("home", true);
+  }, [navigate]);
 
-  const handleUnauthorized = () => {
+  const handleUnauthorized = useCallback(() => {
     setIsLogoutConfirmOpen(false);
     clearAuthSession();
     setIsAuthenticated(false);
     goToLogin();
-  };
+  }, [clearAuthSession, goToLogin]);
+
+  const openHome = useCallback(() => {
+    navigate("home");
+  }, [navigate]);
+
+  const openProfile = useCallback(() => {
+    if (isAuthenticated) {
+      navigate("profile");
+      return;
+    }
+
+    goToLogin();
+  }, [goToLogin, isAuthenticated, navigate]);
+
+  const openChangePassword = useCallback(() => {
+    if (isAuthenticated) {
+      navigate("change-password");
+      return;
+    }
+
+    goToLogin();
+  }, [goToLogin, isAuthenticated, navigate]);
+
+  const openForgotPassword = useCallback(() => {
+    navigate("forgot-password");
+  }, [navigate]);
+
+  const openRegister = useCallback(() => {
+    navigate("register");
+  }, [navigate]);
 
   const accountName = accountProfile?.full_name?.trim() || "Pengguna";
   const accountDescription = accountProfile?.username?.trim() || "Belum login";
@@ -216,9 +337,7 @@ function App() {
         accountName={accountName}
         isAuthenticated={isAuthenticated}
         onAuthAction={handleAuthAction}
-        onOpenProfile={() =>
-          isAuthenticated ? setAuthPage("profile") : goToLogin()
-        }
+        onOpenProfile={openProfile}
       />,
     );
   }
@@ -230,10 +349,8 @@ function App() {
         accountName={accountName}
         isAuthenticated={isAuthenticated}
         onAuthAction={handleAuthAction}
-        onBackHome={() => setAuthPage("home")}
-        onOpenChangePassword={() =>
-          isAuthenticated ? setAuthPage("change-password") : goToLogin()
-        }
+        onBackHome={openHome}
+        onOpenChangePassword={openChangePassword}
         onProfileLoaded={setAccountProfile}
         onUnauthorized={handleUnauthorized}
       />,
@@ -243,8 +360,8 @@ function App() {
   if (authPage === "change-password") {
     return withLogoutDialog(
       <ChangePassword
-        onBackToProfile={() => setAuthPage("profile")}
-        onChangeSuccess={() => setAuthPage("profile")}
+        onBackToProfile={openProfile}
+        onChangeSuccess={openProfile}
         onUnauthorized={handleUnauthorized}
       />,
     );
@@ -268,14 +385,14 @@ function App() {
     <>
       {authPage === "login" ? (
         <Login
-          onForgotPassword={() => setAuthPage("forgot-password")}
+          onForgotPassword={openForgotPassword}
           onLoginSuccess={handleAuthenticated}
-          onSwitchToRegister={() => setAuthPage("register")}
+          onSwitchToRegister={openRegister}
         />
       ) : (
         <Register
           onRegisterSuccess={handleAuthenticated}
-          onSwitchToLogin={() => setAuthPage("login")}
+          onSwitchToLogin={goToLogin}
         />
       )}
     </>,
