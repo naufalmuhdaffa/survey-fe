@@ -232,10 +232,10 @@
   box-shadow: 0 16px 40px rgba(11, 28, 48, 0.16);
   box-sizing: border-box;
   display: grid;
-  gap: 2px 12px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px;
+  grid-template-columns: 1fr;
   max-width: min(420px, calc(100vw - 32px));
-  padding: 14px 14px 14px 16px;
+  padding: 14px 46px 14px 16px;
   position: fixed;
   right: 24px;
   top: 84px;
@@ -252,9 +252,7 @@
   span {
     color: var(--create-muted);
     font-size: 13px;
-    grid-column: 1 / -1;
     line-height: 18px;
-    padding-right: 28px;
   }
 
   button {
@@ -270,6 +268,9 @@
     height: 28px;
     justify-content: center;
     padding: 0;
+    position: absolute;
+    right: 10px;
+    top: 10px;
     width: 28px;
 
     &:hover,
@@ -738,19 +739,13 @@
   display: grid;
   gap: 16px;
   padding: 25px;
+  position: relative;
 
   > header {
-    align-items: center;
-    display: flex;
-    gap: 16px;
-    justify-content: space-between;
-
-    strong {
-      color: var(--create-ink);
-      font-size: 14px;
-      font-weight: 700;
-      line-height: 20px;
-    }
+    position: absolute;
+    right: 16px;
+    top: 16px;
+    z-index: 1;
 
     button {
       align-items: center;
@@ -784,11 +779,11 @@
   background: #ffffff;
   border-left-color: var(--create-border);
   box-shadow: none;
-  padding: 16px;
+  padding: 16px 48px 16px 16px;
 
   .create-question-grid {
     gap: 16px;
-    grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+    grid-template-columns: 1fr;
   }
 
   .create-survey-field textarea {

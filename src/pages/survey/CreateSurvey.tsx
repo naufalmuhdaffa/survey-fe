@@ -220,6 +220,30 @@ const isQuestionLinkedToOption = (
   question.parentOptionLocalId === option.localId ||
   (typeof option.id === "number" && question.parentOptionId === option.id);
 
+const getOptionOwnerQuestion = (
+  questions: SurveyQuestion[],
+  option: QuestionOption,
+) =>
+  questions.find((question) =>
+    question.options.some(
+      (item) =>
+        item.localId === option.localId ||
+        (typeof item.id === "number" && item.id === option.id),
+    ),
+  );
+
+const getParentQuestion = (
+  questions: SurveyQuestion[],
+  question: SurveyQuestion,
+) =>
+  questions.find((candidate) =>
+    candidate.options.some(
+      (option) =>
+        option.localId === question.parentOptionLocalId ||
+        (typeof option.id === "number" && option.id === question.parentOptionId),
+    ),
+  );
+
 const orderQuestionsForPersistence = (questions: SurveyQuestion[]) => {
   const orderedQuestions: SurveyQuestion[] = [];
   const visitedQuestionIds = new Set<string>();
@@ -304,6 +328,18 @@ const removeQuestionsLinkedToOptionWithDescendants = (
     .reduce(
       (nextQuestions, linkedQuestion) =>
         removeQuestionsWithDescendants(nextQuestions, linkedQuestion),
+      questions,
+    );
+
+const removeNestedConditionalQuestions = (questions: SurveyQuestion[]) =>
+  questions
+    .filter((question) => {
+      const parentQuestion = getParentQuestion(questions, question);
+      return parentQuestion ? isConditionalQuestion(parentQuestion) : false;
+    })
+    .reduce(
+      (nextQuestions, nestedQuestion) =>
+        removeQuestionsWithDescendants(nextQuestions, nestedQuestion),
       questions,
     );
 
@@ -492,8 +528,8 @@ export const CreateSurvey = ({
       ]),
     ),
   });
-  const [questions, setQuestions] = useState<SurveyQuestion[]>(
-    storedDraft.questions ?? [],
+  const [questions, setQuestions] = useState<SurveyQuestion[]>(() =>
+    removeNestedConditionalQuestions(storedDraft.questions ?? []),
   );
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -977,6 +1013,16 @@ export const CreateSurvey = ({
   };
 
   const addConditionalQuestion = (parentOption: QuestionOption) => {
+    const optionOwnerQuestion = getOptionOwnerQuestion(questions, parentOption);
+
+    if (optionOwnerQuestion && isConditionalQuestion(optionOwnerQuestion)) {
+      setFeedback({
+        message: "Pertanyaan turunan belum mendukung kondisional lanjutan.",
+        type: "info",
+      });
+      return;
+    }
+
     setQuestions((current) => [
       ...current,
       createConditionalQuestion(parentOption, activePage),
@@ -1518,8 +1564,7 @@ export const CreateSurvey = ({
           .join(" ")}
         key={question.localId}
       >
-        <header>
-          <strong>{questionLabel}</strong>
+        <header aria-label={questionLabel}>
           <button
             aria-label={`Hapus ${questionLabel.toLowerCase()}`}
             onClick={() => void deleteQuestion(question)}
@@ -1591,7 +1636,7 @@ export const CreateSurvey = ({
                         </button>
                       </div>
 
-                      {question.type === "radio_button" && (
+                      {question.type === "radio_button" && !isNested && (
                         <div className="create-question-conditional">
                           {conditionalQuestions.map((conditionalQuestion) => (
                             <div
