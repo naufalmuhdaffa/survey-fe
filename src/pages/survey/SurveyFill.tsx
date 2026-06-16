@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "../../components/sidebar";
 import { Topbar } from "../../components/topbar";
 import adminAvatar from "../../assets/home/home-admin-avatar.png";
 import breadcrumbChevronIcon from "../../assets/profile/profile-breadcrumb-chevron.svg";
 import arrowLeftIcon from "../../assets/survey/create/create-arrow-left.svg";
 import arrowRightIcon from "../../assets/survey/create/create-arrow-right.svg";
-import saveIcon from "../../assets/survey/create/create-publish.svg";
+import fillAutosaveIcon from "../../assets/survey/fill/fill-autosave.svg";
+import fillSaveDraftIcon from "../../assets/survey/fill/fill-save-draft.svg";
+import lockIcon from "../../assets/survey/list/list-lock-icon.svg";
 import { API_BASE_URL } from "../../lib/api";
 import "../../styles/survey/SurveyFill.scss";
 
@@ -98,6 +100,11 @@ type SubmitAnswer =
   | { option_id: number; question_id: number }
   | { option_ids: number[]; question_id: number };
 
+type DropdownPlacement = {
+  maxHeight: number;
+  openUp: boolean;
+};
+
 const DEFAULT_TITLE = "Evaluasi Pelayanan Publik 2024";
 const DEFAULT_SECTION = "Pertanyaan Survey";
 const LOCAL_DRAFT_PREFIX = "survey_response_draft_";
@@ -179,19 +186,19 @@ const normalizeSurveyForm = (form?: SurveyFormApi): SurveyPage[] =>
 
 const getQuestionTypeLabel = (type: string) => {
   if (type === "free_text") {
-    return "Jawaban Teks";
+    return "Jawaban teks";
   }
 
   if (type === "radio_button") {
-    return "Pilihan Tunggal";
+    return "Radio button (pilih salah satu jawaban)";
   }
 
   if (type === "checkbox") {
-    return "Pilihan Ganda";
+    return "Checkbox (pilih satu atau lebih jawaban)";
   }
 
   if (type === "dropdown") {
-    return "Dropdown";
+    return "Dropdown (pilih satu jawaban dari daftar)";
   }
 
   return "Pilihan";
@@ -267,10 +274,18 @@ const isAnswered = (question: SurveyQuestion, value: AnswerValue) => {
   }
 
   if (question.type === "checkbox") {
-    return Array.isArray(value) && value.length > 0;
+    const availableOptionIds = new Set(question.options.map((option) => option.id));
+    return (
+      Array.isArray(value) &&
+      value.some((optionId) => availableOptionIds.has(optionId))
+    );
   }
 
-  return typeof value === "number";
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    question.options.some((option) => option.id === value)
+  );
 };
 
 const buildAnswerPayload = (
@@ -325,8 +340,13 @@ export const SurveyFill = ({
   const [isLoading, setIsLoading] = useState(() => Boolean(surveyId));
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
+  const [dropdownPlacement, setDropdownPlacement] = useState<
+    Record<number, DropdownPlacement>
+  >({});
   const [pages, setPages] = useState<SurveyPage[]>([]);
   const [surveyTitle, setSurveyTitle] = useState(DEFAULT_TITLE);
+  const dropdownButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
 
   const draftKey = getAnswerDraftKey(surveyId);
 
@@ -432,6 +452,74 @@ export const SurveyFill = ({
     return () => window.clearTimeout(timerId);
   }, [feedback]);
 
+  const updateDropdownPlacement = useCallback((questionId: number) => {
+    const button = dropdownButtonRefs.current[questionId];
+
+    if (!button) {
+      return;
+    }
+
+    const rect = button.getBoundingClientRect();
+    const gap = 8;
+    const minimumHeight = 160;
+    const maximumHeight = 320;
+    const availableBelow = window.innerHeight - rect.bottom - gap;
+    const availableAbove = rect.top - gap;
+    const openUp = availableBelow < minimumHeight && availableAbove > availableBelow;
+    const availableSpace = openUp ? availableAbove : availableBelow;
+
+    setDropdownPlacement((current) => ({
+      ...current,
+      [questionId]: {
+        maxHeight: Math.max(
+          120,
+          Math.min(maximumHeight, Math.floor(availableSpace)),
+        ),
+        openUp,
+      },
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (openDropdownId === null) {
+      return;
+    }
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      const target = event.target;
+
+      if (
+        target instanceof Element &&
+        target.closest(`[data-survey-fill-dropdown="${openDropdownId}"]`)
+      ) {
+        return;
+      }
+
+      setOpenDropdownId(null);
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenDropdownId(null);
+      }
+    };
+
+    const refreshPlacement = () => updateDropdownPlacement(openDropdownId);
+
+    updateDropdownPlacement(openDropdownId);
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", refreshPlacement);
+    window.addEventListener("scroll", refreshPlacement, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", refreshPlacement);
+      window.removeEventListener("scroll", refreshPlacement, true);
+    };
+  }, [openDropdownId, updateDropdownPlacement]);
+
   const currentPage = pages[currentPageIndex];
   const visibleQuestionIds = useMemo(
     () => getVisibleQuestionIds(pages, answers),
@@ -459,6 +547,35 @@ export const SurveyFill = ({
   const currentStepLabel = currentPage
     ? `Langkah ${currentPageIndex + 1} dari ${totalPages}: ${currentPage.section}`
     : "Memuat survey";
+  const completedPageIndexes = useMemo(
+    () =>
+      pages.map((page) =>
+        page.questions.every((question) => {
+          if (!visibleQuestionIds.has(question.id) || !question.isRequired) {
+            return true;
+          }
+
+          return isAnswered(question, answers[String(question.id)]);
+        }),
+      ),
+    [answers, pages, visibleQuestionIds],
+  );
+  const unlockedPageIndexes = useMemo(() => {
+    const nextUnlockedIndexes = new Set<number>();
+    let canVisitNextPage = true;
+
+    pages.forEach((_, pageIndex) => {
+      if (pageIndex === 0 || canVisitNextPage) {
+        nextUnlockedIndexes.add(pageIndex);
+      }
+
+      if (!completedPageIndexes[pageIndex]) {
+        canVisitNextPage = false;
+      }
+    });
+
+    return nextUnlockedIndexes;
+  }, [completedPageIndexes, pages]);
 
   const closeSidebar = () => {
     setIsSidebarOpen(false);
@@ -535,6 +652,17 @@ export const SurveyFill = ({
     setFeedback("Draft jawaban berhasil disimpan di perangkat ini.");
   };
 
+  const toggleDropdown = (questionId: number) => {
+    setOpenDropdownId((current) => {
+      if (current === questionId) {
+        return null;
+      }
+
+      window.requestAnimationFrame(() => updateDropdownPlacement(questionId));
+      return questionId;
+    });
+  };
+
   const handlePrevious = () => {
     setCurrentPageIndex((current) => Math.max(0, current - 1));
   };
@@ -549,6 +677,30 @@ export const SurveyFill = ({
     }
 
     setCurrentPageIndex((current) => Math.min(pages.length - 1, current + 1));
+  };
+
+  const handleProgressClick = (targetPageIndex: number) => {
+    if (isLoading || targetPageIndex === currentPageIndex) {
+      return;
+    }
+
+    if (unlockedPageIndexes.has(targetPageIndex)) {
+      setCurrentPageIndex(targetPageIndex);
+      return;
+    }
+
+    const firstBlockedPageIndex = completedPageIndexes.findIndex(
+      (isComplete, pageIndex) => pageIndex < targetPageIndex && !isComplete,
+    );
+    const nextErrors = validatePages([
+      firstBlockedPageIndex >= 0 ? firstBlockedPageIndex : currentPageIndex,
+    ]);
+
+    setFeedback("Lengkapi pertanyaan wajib sebelum membuka langkah ini.");
+
+    if (Object.keys(nextErrors).length > 0) {
+      focusFirstError(nextErrors);
+    }
   };
 
   const handleSubmit = async () => {
@@ -658,6 +810,7 @@ export const SurveyFill = ({
               <label
                 className={[
                   "survey-fill-option",
+                  isCheckbox ? "is-checkbox" : "is-radio",
                   isSelected ? "is-selected" : "",
                   nestingLevel > 0 ? "is-compact" : "",
                 ]
@@ -704,23 +857,74 @@ export const SurveyFill = ({
     }
 
     if (question.type === "dropdown") {
+      const selectedOption =
+        typeof value === "number"
+          ? question.options.find((option) => option.id === value)
+          : null;
+      const isOpen = openDropdownId === question.id;
+      const placement = dropdownPlacement[question.id];
+
       return (
         <>
-          <select
-            aria-label={question.text}
-            onChange={(event) =>
-              updateAnswer(question.id, parsePositiveNumber(event.target.value))
-            }
-            value={typeof value === "number" ? String(value) : ""}
+          <div
+            className={[
+              "survey-fill-dropdown",
+              isOpen ? "is-open" : "",
+              placement?.openUp ? "is-open-up" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            data-survey-fill-dropdown={question.id}
           >
-            <option value="">Pilih jawaban</option>
-            {question.options.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.text}
-              </option>
-            ))}
-          </select>
-          {typeof value === "number" && renderQuestionChildren(value, nestingLevel)}
+            <button
+              aria-expanded={isOpen}
+              aria-haspopup="listbox"
+              className={selectedOption ? "" : "is-placeholder"}
+              onClick={() => toggleDropdown(question.id)}
+              ref={(element) => {
+                dropdownButtonRefs.current[question.id] = element;
+              }}
+              type="button"
+            >
+              <span>{selectedOption?.text ?? "Pilih jawaban"}</span>
+              <i aria-hidden="true" />
+            </button>
+
+            {isOpen && (
+              <div
+                className="survey-fill-dropdown__menu"
+                role="listbox"
+                style={{ maxHeight: `${placement?.maxHeight ?? 280}px` }}
+              >
+                <button
+                  aria-selected={!selectedOption}
+                  onClick={() => {
+                    updateAnswer(question.id, null);
+                    setOpenDropdownId(null);
+                  }}
+                  role="option"
+                  type="button"
+                >
+                  Pilih jawaban
+                </button>
+                {question.options.map((option) => (
+                  <button
+                    aria-selected={selectedOption?.id === option.id}
+                    key={option.id}
+                    onClick={() => {
+                      updateAnswer(question.id, option.id);
+                      setOpenDropdownId(null);
+                    }}
+                    role="option"
+                    type="button"
+                  >
+                    {option.text}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {selectedOption && renderQuestionChildren(selectedOption.id, nestingLevel)}
         </>
       );
     }
@@ -762,7 +966,7 @@ export const SurveyFill = ({
             <h3>{question.text}</h3>
             <p>{getQuestionTypeLabel(question.type)}</p>
           </div>
-          {question.isRequired && <strong>Wajib</strong>}
+          {question.isRequired && <strong>Wajib diisi</strong>}
         </div>
 
         <div className="survey-fill-question__body">
@@ -840,18 +1044,35 @@ export const SurveyFill = ({
               <span>{progressPercent}% Selesai</span>
             </div>
             <div className="survey-fill-progress__bars">
-              {Array.from({ length: totalPages }, (_, index) => (
-                <button
-                  aria-current={index === currentPageIndex ? "step" : undefined}
-                  className={index <= currentPageIndex ? "is-active" : ""}
-                  disabled={isLoading || index > currentPageIndex}
-                  key={index}
-                  onClick={() => setCurrentPageIndex(index)}
-                  type="button"
-                >
-                  <span />
-                </button>
-              ))}
+              {Array.from({ length: totalPages }, (_, index) => {
+                const isCurrentStep = index === currentPageIndex;
+                const isStepComplete = completedPageIndexes[index];
+                const isStepUnlocked = unlockedPageIndexes.has(index);
+
+                return (
+                  <button
+                    aria-current={isCurrentStep ? "step" : undefined}
+                    aria-label={`Buka ${pages[index]?.section ?? `langkah ${index + 1}`}${
+                      isStepUnlocked ? "" : " (terkunci)"
+                    }`}
+                    className={[
+                      isCurrentStep ? "is-current" : "",
+                      isStepComplete ? "is-complete" : "",
+                      isStepUnlocked ? "is-unlocked" : "is-locked",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    disabled={isLoading}
+                    key={index}
+                    onClick={() => handleProgressClick(index)}
+                    type="button"
+                  >
+                    {!isStepUnlocked && (
+                      <img src={lockIcon} alt="" aria-hidden="true" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
             <div className="survey-fill-progress__labels">
               {pages.map((page, index) => (
@@ -884,6 +1105,7 @@ export const SurveyFill = ({
                 <div className="survey-fill-actions">
                   <div>
                     <button
+                      className="survey-fill-actions__back"
                       disabled={currentPageIndex === 0}
                       onClick={handlePrevious}
                       type="button"
@@ -891,16 +1113,24 @@ export const SurveyFill = ({
                       <img src={arrowLeftIcon} alt="" aria-hidden="true" />
                       Kembali
                     </button>
-                    <button onClick={handleSaveDraft} type="button">
-                      <img src={saveIcon} alt="" aria-hidden="true" />
+                    <button
+                      className="survey-fill-actions__draft"
+                      onClick={handleSaveDraft}
+                      type="button"
+                    >
+                      <img src={fillSaveDraftIcon} alt="" aria-hidden="true" />
                       Simpan Draft
                     </button>
                   </div>
 
-                  <p>Draft disimpan otomatis ke langkah ini</p>
+                  <p className="survey-fill-autosave">
+                    <img src={fillAutosaveIcon} alt="" aria-hidden="true" />
+                    Draft disimpan otomatis ke langkah ini
+                  </p>
 
                   {currentPageIndex === pages.length - 1 ? (
                     <button
+                      className="survey-fill-actions__primary"
                       disabled={isSubmitting}
                       onClick={() => void handleSubmit()}
                       type="button"
@@ -909,7 +1139,11 @@ export const SurveyFill = ({
                       <img src={arrowRightIcon} alt="" aria-hidden="true" />
                     </button>
                   ) : (
-                    <button onClick={handleNext} type="button">
+                    <button
+                      className="survey-fill-actions__primary"
+                      onClick={handleNext}
+                      type="button"
+                    >
                       Selanjutnya
                       <img src={arrowRightIcon} alt="" aria-hidden="true" />
                     </button>
