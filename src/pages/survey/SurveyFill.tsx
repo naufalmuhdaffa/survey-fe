@@ -288,6 +288,31 @@ const isAnswered = (question: SurveyQuestion, value: AnswerValue) => {
   );
 };
 
+const getPageCompletionStatuses = (
+  pages: SurveyPage[],
+  answers: Record<string, AnswerValue>,
+  visibleQuestionIds: Set<number>,
+) =>
+  pages.map((page) =>
+    page.questions.every((question) => {
+      if (!visibleQuestionIds.has(question.id) || !question.isRequired) {
+        return true;
+      }
+
+      return isAnswered(question, answers[String(question.id)]);
+    }),
+  );
+
+const getCompletedPageCount = (completedPageIndexes: boolean[]) => {
+  const firstIncompletePageIndex = completedPageIndexes.findIndex(
+    (isComplete) => !isComplete,
+  );
+
+  return firstIncompletePageIndex === -1
+    ? completedPageIndexes.length
+    : firstIncompletePageIndex;
+};
+
 const buildAnswerPayload = (
   pages: SurveyPage[],
   answers: Record<string, AnswerValue>,
@@ -402,10 +427,24 @@ export const SurveyFill = ({
         const storedDraft = localStorage.getItem(getAnswerDraftKey(surveyId));
         const draft = storedDraft ? (JSON.parse(storedDraft) as DraftState) : null;
         const draftPage = draft?.page ?? 0;
+        const draftAnswers = draft?.answers ?? {};
+        const draftVisibleQuestionIds = getVisibleQuestionIds(
+          nextPages,
+          draftAnswers,
+        );
+        const draftCompletedPageCount = getCompletedPageCount(
+          getPageCompletionStatuses(
+            nextPages,
+            draftAnswers,
+            draftVisibleQuestionIds,
+          ),
+        );
 
-        setAnswers(draft?.answers ?? {});
+        setAnswers(draftAnswers);
         setCurrentPageIndex(
-          draftPage >= 0 && draftPage < nextPages.length ? draftPage : 0,
+          draftPage >= 0 && draftPage < nextPages.length
+            ? Math.min(draftPage, draftCompletedPageCount)
+            : 0,
         );
         setPages(nextPages);
       } catch (error) {
@@ -542,40 +581,30 @@ export const SurveyFill = ({
     return children;
   }, [currentPage]);
 
+  const completedPageIndexes = useMemo(
+    () => getPageCompletionStatuses(pages, answers, visibleQuestionIds),
+    [answers, pages, visibleQuestionIds],
+  );
+  const completedPageCount = useMemo(
+    () => getCompletedPageCount(completedPageIndexes),
+    [completedPageIndexes],
+  );
   const totalPages = pages.length || 1;
-  const progressPercent = Math.round(((currentPageIndex + 1) / totalPages) * 100);
+  const progressPercent = Math.round((completedPageCount / totalPages) * 100);
   const currentStepLabel = currentPage
     ? `Langkah ${currentPageIndex + 1} dari ${totalPages}: ${currentPage.section}`
     : "Memuat survey";
-  const completedPageIndexes = useMemo(
-    () =>
-      pages.map((page) =>
-        page.questions.every((question) => {
-          if (!visibleQuestionIds.has(question.id) || !question.isRequired) {
-            return true;
-          }
-
-          return isAnswered(question, answers[String(question.id)]);
-        }),
-      ),
-    [answers, pages, visibleQuestionIds],
-  );
   const unlockedPageIndexes = useMemo(() => {
     const nextUnlockedIndexes = new Set<number>();
-    let canVisitNextPage = true;
 
     pages.forEach((_, pageIndex) => {
-      if (pageIndex === 0 || canVisitNextPage) {
+      if (pageIndex <= completedPageCount) {
         nextUnlockedIndexes.add(pageIndex);
-      }
-
-      if (!completedPageIndexes[pageIndex]) {
-        canVisitNextPage = false;
       }
     });
 
     return nextUnlockedIndexes;
-  }, [completedPageIndexes, pages]);
+  }, [completedPageCount, pages]);
 
   const closeSidebar = () => {
     setIsSidebarOpen(false);
@@ -1046,7 +1075,7 @@ export const SurveyFill = ({
             <div className="survey-fill-progress__bars">
               {Array.from({ length: totalPages }, (_, index) => {
                 const isCurrentStep = index === currentPageIndex;
-                const isStepComplete = completedPageIndexes[index];
+                const isStepComplete = index < completedPageCount;
                 const isStepUnlocked = unlockedPageIndexes.has(index);
 
                 return (
@@ -1095,7 +1124,6 @@ export const SurveyFill = ({
               <>
                 <div className="survey-fill-card__head">
                   <h2>{currentPage.section}</h2>
-                  <span>Wajib diisi</span>
                 </div>
 
                 <div className="survey-fill-card__questions">

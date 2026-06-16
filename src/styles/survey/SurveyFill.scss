@@ -218,7 +218,6 @@
   align-items: center;
   border-bottom: 1px solid rgba(226, 191, 185, 0.2);
   display: flex;
-  justify-content: space-between;
   margin: 40px 40px 0;
   padding-bottom: 17px;
 
@@ -228,18 +227,6 @@
     font-weight: 700;
     line-height: 32px;
     margin: 0;
-  }
-
-  span {
-    background: var(--survey-fill-green-soft);
-    border-radius: 6px;
-    color: var(--survey-fill-green);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.25px;
-    line-height: 15px;
-    padding: 4px 8px;
-    text-transform: uppercase;
   }
 }
 
