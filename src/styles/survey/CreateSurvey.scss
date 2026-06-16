@@ -557,10 +557,15 @@
 
 .create-question-tabs {
   align-items: center;
+  background: var(--create-canvas);
   border-bottom: 1px solid var(--create-border);
   display: flex;
   gap: 16px;
   min-height: 52px;
+  padding-top: 4px;
+  position: sticky;
+  top: 64px;
+  z-index: 20;
 
   button {
     background: transparent;
@@ -648,7 +653,8 @@
 }
 
 .create-section-title {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  max-width: calc(100% - 40px);
   min-width: 0;
 
   input {
@@ -663,9 +669,11 @@
     font-size: 24px;
     font-weight: 600;
     line-height: 32px;
+    max-width: 100%;
+    min-width: 24ch;
     outline: 0;
     padding: 0 0 4px;
-    width: 100%;
+    width: auto;
 
     &::placeholder {
       color: rgba(11, 28, 48, 0.55);
@@ -786,8 +794,17 @@
     grid-template-columns: 1fr;
   }
 
+  .create-question-side {
+    align-items: end;
+    grid-template-columns: minmax(0, 1fr) minmax(150px, 220px);
+  }
+
   .create-survey-field textarea {
     min-height: 78px;
+  }
+
+  .create-question-conditional {
+    margin-left: 0;
   }
 }
 
@@ -1299,6 +1316,10 @@
   }
 
   .create-question-card--nested .create-question-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .create-question-card--nested .create-question-side {
     grid-template-columns: 1fr;
   }
 

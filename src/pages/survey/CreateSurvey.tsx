@@ -22,6 +22,7 @@ import "../../styles/survey/CreateSurvey.scss";
 
 const AUTH_TOKEN_KEY = "survey_auth_token";
 const DRAFT_STORAGE_KEY = "survey_create_draft";
+const MAX_QUESTION_DEPTH = 3;
 
 type CreateSurveyProps = {
   accountDescription?: string;
@@ -244,6 +245,30 @@ const getParentQuestion = (
     ),
   );
 
+const getQuestionDepth = (
+  questions: SurveyQuestion[],
+  question: SurveyQuestion,
+) => {
+  const visitedQuestionIds = new Set<string>();
+  let currentQuestion: SurveyQuestion | undefined = question;
+  let depth = 1;
+
+  while (
+    currentQuestion &&
+    isConditionalQuestion(currentQuestion) &&
+    !visitedQuestionIds.has(currentQuestion.localId)
+  ) {
+    visitedQuestionIds.add(currentQuestion.localId);
+    currentQuestion = getParentQuestion(questions, currentQuestion);
+
+    if (currentQuestion) {
+      depth += 1;
+    }
+  }
+
+  return depth;
+};
+
 const orderQuestionsForPersistence = (questions: SurveyQuestion[]) => {
   const orderedQuestions: SurveyQuestion[] = [];
   const visitedQuestionIds = new Set<string>();
@@ -331,12 +356,11 @@ const removeQuestionsLinkedToOptionWithDescendants = (
       questions,
     );
 
-const removeNestedConditionalQuestions = (questions: SurveyQuestion[]) =>
+const removeOverDepthConditionalQuestions = (questions: SurveyQuestion[]) =>
   questions
-    .filter((question) => {
-      const parentQuestion = getParentQuestion(questions, question);
-      return parentQuestion ? isConditionalQuestion(parentQuestion) : false;
-    })
+    .filter(
+      (question) => getQuestionDepth(questions, question) > MAX_QUESTION_DEPTH,
+    )
     .reduce(
       (nextQuestions, nestedQuestion) =>
         removeQuestionsWithDescendants(nextQuestions, nestedQuestion),
@@ -529,7 +553,7 @@ export const CreateSurvey = ({
     ),
   });
   const [questions, setQuestions] = useState<SurveyQuestion[]>(() =>
-    removeNestedConditionalQuestions(storedDraft.questions ?? []),
+    removeOverDepthConditionalQuestions(storedDraft.questions ?? []),
   );
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -538,6 +562,7 @@ export const CreateSurvey = ({
   const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState(
     defaultThumbnailPreview,
   );
+  const sectionTitleInputRef = useRef<HTMLInputElement | null>(null);
   const thumbnailObjectUrl = useRef<string | null>(null);
 
   useEffect(() => {
@@ -658,6 +683,62 @@ export const CreateSurvey = ({
       ...current,
       [activePage]: value,
     }));
+  };
+
+  const saveActiveSection = async () => {
+    try {
+      if (!isAuthenticated) {
+        onUnauthorized?.();
+        throw new UnauthorizedError();
+      }
+
+      let targetSurveyId = surveyId;
+
+      if (targetSurveyId === null) {
+        if (surveyInfo.title.trim() === "") {
+          setFeedback({
+            message:
+              "Nama section tersimpan di draft lokal. Isi judul survey agar bisa disimpan ke server.",
+            type: "info",
+          });
+          return;
+        }
+
+        targetSurveyId = await saveSurveyDraft();
+      }
+
+      await requestJson(
+        `/surveys/${targetSurveyId}/pages/${activePage}`,
+        {
+          body: JSON.stringify({
+            section: (sectionTitles[activePage] ?? "").trim(),
+          }),
+          method: "PUT",
+        },
+        "Nama section belum bisa disimpan.",
+      );
+    } catch (error) {
+      setFeedback({
+        message: getOperationMessage(error, "Nama section belum bisa disimpan."),
+        type: "error",
+      });
+    }
+  };
+
+  const toggleSectionTitleFocus = async () => {
+    const sectionInput = sectionTitleInputRef.current;
+
+    if (!sectionInput) {
+      return;
+    }
+
+    if (document.activeElement === sectionInput) {
+      sectionInput.blur();
+      await saveActiveSection();
+      return;
+    }
+
+    sectionInput.focus();
   };
 
   const setBuilderStep = (nextStep: BuilderStep, replace = false) => {
@@ -1014,10 +1095,13 @@ export const CreateSurvey = ({
 
   const addConditionalQuestion = (parentOption: QuestionOption) => {
     const optionOwnerQuestion = getOptionOwnerQuestion(questions, parentOption);
+    const optionOwnerDepth = optionOwnerQuestion
+      ? getQuestionDepth(questions, optionOwnerQuestion)
+      : 1;
 
-    if (optionOwnerQuestion && isConditionalQuestion(optionOwnerQuestion)) {
+    if (optionOwnerDepth >= MAX_QUESTION_DEPTH) {
       setFeedback({
-        message: "Pertanyaan turunan belum mendukung kondisional lanjutan.",
+        message: "Pertanyaan kondisional dibatasi maksimal 3 tingkat.",
         type: "info",
       });
       return;
@@ -1553,6 +1637,142 @@ export const CreateSurvey = ({
     const questionLabel = isNested
       ? "Teks Pertanyaan Turunan"
       : `Teks Pertanyaan ${index + 1}`;
+    const questionDepth = getQuestionDepth(questions, question);
+    const canAddConditionalQuestion =
+      question.type === "radio_button" && questionDepth < MAX_QUESTION_DEPTH;
+    const questionControls = (
+      <aside className="create-question-side">
+        <label className="create-survey-field">
+          <span>Tipe Pertanyaan</span>
+          <select
+            onChange={(event) =>
+              void changeQuestionType(
+                question.localId,
+                event.target.value as QuestionType,
+              )
+            }
+            value={question.type}
+          >
+            {questionTypes.map((type) => (
+              <option key={type.value} value={type.value}>
+                {type.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="create-survey-switch">
+          <input
+            checked={question.isRequired}
+            onChange={(event) =>
+              updateQuestion(question.localId, (current) => ({
+                ...current,
+                isRequired: event.target.checked,
+              }))
+            }
+            type="checkbox"
+          />
+          Wajib Diisi
+        </label>
+      </aside>
+    );
+    const questionBody = (
+      <div className="create-question-main">
+        <label className="create-survey-field">
+          <span>{questionLabel}</span>
+          <textarea
+            onChange={(event) =>
+              updateQuestion(question.localId, (current) => ({
+                ...current,
+                text: event.target.value,
+              }))
+            }
+            placeholder="Tulis pertanyaan untuk responden"
+            rows={3}
+            value={question.text}
+          />
+        </label>
+
+        {isChoiceQuestion(question.type) ? (
+          <div className="create-question-options">
+            <span>Pilihan Jawaban</span>
+            {question.options.map((option, optionIndex) => {
+              const conditionalQuestions = getConditionalQuestions(option);
+              const optionLabel = option.text || `Pilihan ${optionIndex + 1}`;
+
+              return (
+                <div className="create-question-option" key={option.localId}>
+                  <div className="create-question-option__input">
+                    <i
+                      aria-hidden="true"
+                      className={`create-option-marker create-option-marker--${question.type}`}
+                    />
+                    <input
+                      onChange={(event) =>
+                        updateQuestion(question.localId, (current) => ({
+                          ...current,
+                          options: current.options.map((item) =>
+                            item.localId === option.localId
+                              ? { ...item, text: event.target.value }
+                              : item,
+                          ),
+                        }))
+                      }
+                      placeholder={`Pilihan ${optionIndex + 1}`}
+                      value={option.text}
+                    />
+                    <button
+                      aria-label={`Hapus opsi ${optionIndex + 1}`}
+                      className="create-question-option__delete"
+                      disabled={question.options.length <= 2}
+                      onClick={() => void removeOption(question.localId, option)}
+                      type="button"
+                    >
+                      <img src={deleteIcon} alt="" aria-hidden="true" />
+                    </button>
+                  </div>
+
+                  {canAddConditionalQuestion && (
+                    <div className="create-question-conditional">
+                      {conditionalQuestions.map((conditionalQuestion) => (
+                        <div
+                          className="create-question-conditional__item"
+                          key={conditionalQuestion.localId}
+                        >
+                          <span>
+                            {`Jika "${optionLabel}" dipilih, tampilkan`}
+                          </span>
+                          {renderQuestionCard(
+                            conditionalQuestion,
+                            questions.indexOf(conditionalQuestion),
+                            true,
+                          )}
+                        </div>
+                      ))}
+                      <button
+                        className="create-question-conditional__add"
+                        onClick={() => addConditionalQuestion(option)}
+                        type="button"
+                      >
+                        Tambah Kondisional
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <button onClick={() => addOption(question.localId)} type="button">
+              <img src={addOptionIcon} alt="" aria-hidden="true" />
+              Tambah Opsi
+            </button>
+          </div>
+        ) : (
+          <div className="create-question-preview">
+            Responden akan menulis jawaban di sini.
+          </div>
+        )}
+      </div>
+    );
 
     return (
       <article
@@ -1574,156 +1794,42 @@ export const CreateSurvey = ({
           </button>
         </header>
 
-        <div className="create-question-grid">
-          <div className="create-question-main">
-            <label className="create-survey-field">
-              <span>{questionLabel}</span>
-              <textarea
-                onChange={(event) =>
-                  updateQuestion(question.localId, (current) => ({
-                    ...current,
-                    text: event.target.value,
-                  }))
-                }
-                placeholder="Tulis pertanyaan untuk responden"
-                rows={3}
-                value={question.text}
-              />
-            </label>
-
-            {isChoiceQuestion(question.type) ? (
-              <div className="create-question-options">
-                <span>Pilihan Jawaban</span>
-                {question.options.map((option, optionIndex) => {
-                  const conditionalQuestions = getConditionalQuestions(option);
-                  const optionLabel =
-                    option.text || `Pilihan ${optionIndex + 1}`;
-
-                  return (
-                    <div
-                      className="create-question-option"
-                      key={option.localId}
-                    >
-                      <div className="create-question-option__input">
-                        <i
-                          aria-hidden="true"
-                          className={`create-option-marker create-option-marker--${question.type}`}
-                        />
-                        <input
-                          onChange={(event) =>
-                            updateQuestion(question.localId, (current) => ({
-                              ...current,
-                              options: current.options.map((item) =>
-                                item.localId === option.localId
-                                  ? { ...item, text: event.target.value }
-                                  : item,
-                              ),
-                            }))
-                          }
-                          placeholder={`Pilihan ${optionIndex + 1}`}
-                          value={option.text}
-                        />
-                        <button
-                          aria-label={`Hapus opsi ${optionIndex + 1}`}
-                          className="create-question-option__delete"
-                          disabled={question.options.length <= 2}
-                          onClick={() =>
-                            void removeOption(question.localId, option)
-                          }
-                          type="button"
-                        >
-                          <img src={deleteIcon} alt="" aria-hidden="true" />
-                        </button>
-                      </div>
-
-                      {question.type === "radio_button" && !isNested && (
-                        <div className="create-question-conditional">
-                          {conditionalQuestions.map((conditionalQuestion) => (
-                            <div
-                              className="create-question-conditional__item"
-                              key={conditionalQuestion.localId}
-                            >
-                              <span>
-                                {`Jika "${optionLabel}" dipilih, tampilkan`}
-                              </span>
-                              {renderQuestionCard(
-                                conditionalQuestion,
-                                questions.indexOf(conditionalQuestion),
-                                true,
-                              )}
-                            </div>
-                          ))}
-                          <button
-                            className="create-question-conditional__add"
-                            onClick={() => addConditionalQuestion(option)}
-                            type="button"
-                          >
-                            Tambah Kondisional
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                <button
-                  onClick={() => addOption(question.localId)}
-                  type="button"
-                >
-                  <img src={addOptionIcon} alt="" aria-hidden="true" />
-                  Tambah Opsi
-                </button>
-              </div>
-            ) : (
-              <div className="create-question-preview">
-                Placeholder untuk jawaban responden...
-              </div>
-            )}
-          </div>
-
-          <aside className="create-question-side">
-            <label className="create-survey-field">
-              <span>Tipe Pertanyaan</span>
-              <select
-                onChange={(event) =>
-                  void changeQuestionType(
-                    question.localId,
-                    event.target.value as QuestionType,
-                  )
-                }
-                value={question.type}
-              >
-                {questionTypes.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="create-survey-switch">
-              <input
-                checked={question.isRequired}
-                onChange={(event) =>
-                  updateQuestion(question.localId, (current) => ({
-                    ...current,
-                    isRequired: event.target.checked,
-                  }))
-                }
-                type="checkbox"
-              />
-              Wajib Diisi
-            </label>
-          </aside>
+        <div
+          className={[
+            "create-question-grid",
+            isNested ? "create-question-grid--nested" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          {isNested ? (
+            <>
+              {questionControls}
+              {questionBody}
+            </>
+          ) : (
+            <>
+              {questionBody}
+              {questionControls}
+            </>
+          )}
         </div>
       </article>
     );
   };
 
-  const renderStepTwo = () => (
-    <section
-      className="create-question-canvas"
-      aria-labelledby="survey-question-title"
-    >
+  const renderStepTwo = () => {
+    const sectionPlaceholder = `Pertanyaan Kuesioner (Halaman ${activePage})`;
+    const sectionTitleSize = Math.min(
+      Math.max((currentSectionTitle || sectionPlaceholder).length + 1, 24),
+      64,
+    );
+
+    return (
+      <section
+        className="create-question-canvas"
+        aria-labelledby="survey-question-title"
+      >
       <div
         className="create-question-tabs"
         role="tablist"
@@ -1759,12 +1865,27 @@ export const CreateSurvey = ({
         >
           <input
             id="survey-section-title"
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") {
+                return;
+              }
+
+              event.preventDefault();
+              void toggleSectionTitleFocus();
+            }}
             onChange={(event) => updateSectionTitle(event.target.value)}
-            placeholder={`Pertanyaan Kuesioner (Halaman ${activePage})`}
+            placeholder={sectionPlaceholder}
+            ref={sectionTitleInputRef}
+            size={sectionTitleSize}
             value={currentSectionTitle}
           />
         </label>
-        <button aria-label="Ubah nama section" type="button">
+        <button
+          aria-label="Ubah atau simpan nama section"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => void toggleSectionTitleFocus()}
+          type="button"
+        >
           <img src={editIcon} alt="" aria-hidden="true" />
         </button>
       </div>
@@ -1803,8 +1924,9 @@ export const CreateSurvey = ({
       {fieldErrors.questions && (
         <span className="create-survey-sr-only">{fieldErrors.questions}</span>
       )}
-    </section>
-  );
+      </section>
+    );
+  };
 
   const renderBreadcrumbs = () => {
     if (step === 1) {
