@@ -14,6 +14,7 @@ import { API_BASE_URL } from "./lib/api";
 type AuthPage =
   | "change-password"
   | "create-survey"
+  | "edit-survey"
   | "forgot-password"
   | "home"
   | "login"
@@ -37,6 +38,7 @@ type ProfileApiResult = {
 const PAGE_PATHS: Record<AuthPage, string> = {
   "change-password": "/profile/change-password",
   "create-survey": "/surveys/create/informasi-umum",
+  "edit-survey": "/surveys/manage",
   "forgot-password": "/forgot-password",
   home: "/",
   login: "/login",
@@ -47,10 +49,19 @@ const PAGE_PATHS: Record<AuthPage, string> = {
 };
 
 const CREATE_SURVEY_BASE_PATH = "/surveys/create";
+const EDIT_SURVEY_PATH_PATTERN = /^\/surveys\/edit\/(\d+)(?:\/.*)?$/;
 
 const isCreateSurveyPath = (path: string) =>
   path === CREATE_SURVEY_BASE_PATH ||
   path.startsWith(`${CREATE_SURVEY_BASE_PATH}/`);
+
+const getEditSurveyIdFromPath = (path = window.location.pathname) => {
+  const [, surveyId] = path.match(EDIT_SURVEY_PATH_PATTERN) ?? [];
+  const parsedSurveyId = Number(surveyId);
+  return Number.isFinite(parsedSurveyId) ? parsedSurveyId : null;
+};
+
+const isEditSurveyPath = (path: string) => getEditSurveyIdFromPath(path) !== null;
 
 const hasStoredAuth = () =>
   Boolean(
@@ -82,6 +93,7 @@ const getInitialAuthPage = (): AuthPage => {
     (normalizedPath === PAGE_PATHS.profile ||
       normalizedPath === PAGE_PATHS["change-password"] ||
       isCreateSurveyPath(normalizedPath) ||
+      isEditSurveyPath(normalizedPath) ||
       normalizedPath === PAGE_PATHS["manage-surveys"]) &&
     !hasStoredAuth()
   ) {
@@ -98,6 +110,10 @@ const getInitialAuthPage = (): AuthPage => {
 
   if (isCreateSurveyPath(normalizedPath)) {
     return "create-survey";
+  }
+
+  if (isEditSurveyPath(normalizedPath)) {
+    return "edit-survey";
   }
 
   if (normalizedPath === PAGE_PATHS["manage-surveys"]) {
@@ -129,6 +145,13 @@ const syncUrl = (page: AuthPage, replace = false) => {
   if (
     page === "create-survey" &&
     isCreateSurveyPath(url.pathname.replace(/\/+$/, ""))
+  ) {
+    return;
+  }
+
+  if (
+    page === "edit-survey" &&
+    isEditSurveyPath(url.pathname.replace(/\/+$/, ""))
   ) {
     return;
   }
@@ -167,6 +190,9 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => hasStoredAuth());
   const [resetToken, setResetToken] = useState<string | null>(() => getResetToken());
   const [authPage, setAuthPage] = useState<AuthPage>(() => getInitialAuthPage());
+  const [editSurveyId, setEditSurveyId] = useState<number | null>(() =>
+    getEditSurveyIdFromPath(),
+  );
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(
     null,
   );
@@ -178,6 +204,7 @@ function App() {
     const handlePopState = () => {
       const nextResetToken = getResetToken();
       setResetToken(nextResetToken);
+      setEditSurveyId(getEditSurveyIdFromPath());
       setAuthPage(getInitialAuthPage());
     };
 
@@ -188,6 +215,10 @@ function App() {
   const navigate = useCallback((page: AuthPage, replace = false) => {
     if (page !== "reset-password") {
       setResetToken(null);
+    }
+
+    if (page !== "edit-survey") {
+      setEditSurveyId(null);
     }
 
     setAuthPage(page);
@@ -319,6 +350,25 @@ function App() {
     goToLogin();
   }, [goToLogin, isAuthenticated, navigate]);
 
+  const openEditSurvey = useCallback(
+    (surveyId: number) => {
+      if (!isAuthenticated) {
+        goToLogin();
+        return;
+      }
+
+      const url = new URL(window.location.href);
+      url.pathname = `/surveys/edit/${surveyId}/informasi-umum`;
+      url.search = "";
+      url.hash = "";
+      window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      setEditSurveyId(surveyId);
+      setResetToken(null);
+      setAuthPage("edit-survey");
+    },
+    [goToLogin, isAuthenticated],
+  );
+
   const openForgotPassword = useCallback(() => {
     navigate("forgot-password");
   }, [navigate]);
@@ -412,6 +462,7 @@ function App() {
         onAuthAction={handleAuthAction}
         onBackHome={openHome}
         onCreateSurvey={openCreateSurvey}
+        onEditSurvey={openEditSurvey}
         onOpenProfile={openProfile}
         onUnauthorized={handleUnauthorized}
       />,
@@ -424,6 +475,23 @@ function App() {
         accountDescription={accountDescription}
         accountName={accountName}
         isAuthenticated={isAuthenticated}
+        onAuthAction={handleAuthAction}
+        onBackHome={openHome}
+        onOpenManageSurveys={openManageSurveys}
+        onOpenProfile={openProfile}
+        onUnauthorized={handleUnauthorized}
+      />,
+    );
+  }
+
+  if (authPage === "edit-survey") {
+    return withLogoutDialog(
+      <CreateSurvey
+        accountDescription={accountDescription}
+        accountName={accountName}
+        editSurveyId={editSurveyId}
+        isAuthenticated={isAuthenticated}
+        mode="edit"
         onAuthAction={handleAuthAction}
         onBackHome={openHome}
         onOpenManageSurveys={openManageSurveys}

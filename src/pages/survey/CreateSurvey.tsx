@@ -27,7 +27,9 @@ const MAX_QUESTION_DEPTH = 3;
 type CreateSurveyProps = {
   accountDescription?: string;
   accountName?: string;
+  editSurveyId?: number | null;
   isAuthenticated: boolean;
+  mode?: "create" | "edit";
   onAuthAction?: () => void;
   onBackHome?: () => void;
   onOpenManageSurveys?: () => void;
@@ -80,6 +82,8 @@ type SurveyQuestion = {
   type: QuestionType;
 };
 
+type SurveyStatus = "closed" | "draft" | "open" | "upcoming" | string;
+
 type DraftStorage = {
   activePage?: number;
   questions?: SurveyQuestion[];
@@ -103,6 +107,43 @@ type FieldErrors = Partial<Record<keyof SurveyInfo | "questions", string>>;
 
 type UploadResult = {
   thumbnail_path?: string;
+};
+
+type SurveyDetailOption = {
+  id: number | string;
+  option_order?: number | string | null;
+  option_text?: string | null;
+};
+
+type SurveyDetailQuestion = {
+  id: number | string;
+  is_required?: boolean | number | string | null;
+  options?: SurveyDetailOption[];
+  page?: number | string | null;
+  parent_option_id?: number | string | null;
+  question_order?: number | string | null;
+  question_text?: string | null;
+  question_type?: QuestionType | string | null;
+};
+
+type SurveyDetailPage = {
+  page?: number | string | null;
+  questions?: SurveyDetailQuestion[];
+  section?: string | null;
+};
+
+type SurveyDetail = {
+  closes_at?: string | null;
+  description?: string | null;
+  estimated_time?: number | string | null;
+  id?: number | string;
+  instructions?: string | null;
+  opens_at?: string | null;
+  pages?: SurveyDetailPage[];
+  restrictions?: string[] | null;
+  status?: SurveyStatus | null;
+  thumbnail_path?: string | null;
+  title?: string | null;
 };
 
 type OptionIdsByLocalId = Map<string, number>;
@@ -375,14 +416,31 @@ const toApiDateTime = (value: string) => {
   return value.replace("T", " ") + (value.length === 16 ? ":00" : "");
 };
 
+const toDateTimeInputValue = (value?: string | null) => {
+  if (!value) {
+    return "";
+  }
+
+  const normalizedValue = value.replace(" ", "T");
+  return normalizedValue.slice(0, 16);
+};
+
 const toNumberOrNull = (value: string) => {
   const parsedValue = Number(value);
   return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : null;
 };
 
-const readStoredDraft = (): DraftStorage => {
+const parseOptionalNumber = (value: number | string | null | undefined) => {
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : null;
+};
+
+const getDraftStorageKey = (mode: "create" | "edit", surveyId?: number | null) =>
+  mode === "edit" && surveyId ? `${DRAFT_STORAGE_KEY}_${surveyId}` : DRAFT_STORAGE_KEY;
+
+const readStoredDraft = (storageKey = DRAFT_STORAGE_KEY): DraftStorage => {
   try {
-    const rawDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
+    const rawDraft = localStorage.getItem(storageKey);
     return rawDraft ? (JSON.parse(rawDraft) as DraftStorage) : {};
   } catch {
     return {};
@@ -391,7 +449,8 @@ const readStoredDraft = (): DraftStorage => {
 
 const getStepFromUrl = (): BuilderStep => {
   const [, route] =
-    window.location.pathname.match(/\/surveys\/create\/([^/]+)/) ?? [];
+    window.location.pathname.match(/\/surveys\/(?:create|edit\/\d+)\/([^/]+)/) ??
+    [];
 
   if (route && route in routeSteps) {
     return routeSteps[route as StepRoute];
@@ -402,7 +461,9 @@ const getStepFromUrl = (): BuilderStep => {
 
 const getQuestionPageFromUrl = (fallbackPage = 1) => {
   const [, route, page] =
-    window.location.pathname.match(/\/surveys\/create\/([^/]+)\/(\d+)/) ?? [];
+    window.location.pathname.match(
+      /\/surveys\/(?:create|edit\/\d+)\/([^/]+)\/(\d+)/,
+    ) ?? [];
 
   if (route !== stepRoutes[2]) {
     return fallbackPage;
@@ -414,12 +475,17 @@ const getQuestionPageFromUrl = (fallbackPage = 1) => {
     : fallbackPage;
 };
 
-const syncStepUrl = (step: BuilderStep, activePage = 1, replace = false) => {
+const syncStepUrl = (
+  basePath: string,
+  step: BuilderStep,
+  activePage = 1,
+  replace = false,
+) => {
   const url = new URL(window.location.href);
   url.pathname =
     step === 2
-      ? `/surveys/create/${stepRoutes[step]}/${Math.max(1, activePage)}`
-      : `/surveys/create/${stepRoutes[step]}`;
+      ? `${basePath}/${stepRoutes[step]}/${Math.max(1, activePage)}`
+      : `${basePath}/${stepRoutes[step]}`;
 
   const nextUrl = `${url.pathname}${url.search}${url.hash}`;
   const currentUrl =
@@ -520,21 +586,133 @@ const getPublishStatus = (opensAt: string) => {
   return new Date(opensAt).getTime() > Date.now() ? "upcoming" : "open";
 };
 
+const validQuestionTypes = new Set<QuestionType>(
+  questionTypes.map((type) => type.value),
+);
+
+const normalizeQuestionType = (type?: string | null): QuestionType =>
+  type && validQuestionTypes.has(type as QuestionType)
+    ? (type as QuestionType)
+    : "free_text";
+
+const normalizeRequiredFlag = (
+  value: boolean | number | string | null | undefined,
+) => value === true || value === 1 || value === "1" || value === "true";
+
+const resolveThumbnailUrl = (thumbnailPath?: string | null) => {
+  if (!thumbnailPath) {
+    return defaultThumbnailPreview;
+  }
+
+  if (/^https?:\/\//i.test(thumbnailPath)) {
+    return thumbnailPath;
+  }
+
+  return `${API_BASE_URL}${thumbnailPath.startsWith("/") ? "" : "/"}${thumbnailPath}`;
+};
+
+const normalizeSurveyDetail = (detail: SurveyDetail) => {
+  const restrictions = Array.isArray(detail.restrictions)
+    ? detail.restrictions.filter((position): position is string =>
+        typeof position === "string",
+      )
+    : [];
+  const isPublicAudience =
+    restrictions.length === 0 || restrictions.includes("public");
+  const sectionTitles = new Map<number, string>();
+  const questions: SurveyQuestion[] = [];
+
+  (detail.pages ?? []).forEach((page) => {
+    const pageNumber = Math.max(1, Number(page.page) || 1);
+
+    sectionTitles.set(pageNumber, page.section ?? "");
+
+    (page.questions ?? []).forEach((question, questionIndex) => {
+      const questionId = parseOptionalNumber(question.id);
+      const questionType = normalizeQuestionType(question.question_type);
+
+      questions.push({
+        id: questionId ?? undefined,
+        isRequired: normalizeRequiredFlag(question.is_required),
+        localId: questionId ? `question-${questionId}` : createLocalId(),
+        options: isChoiceQuestion(questionType)
+          ? (question.options ?? []).map((option, optionIndex) => {
+              const optionId = parseOptionalNumber(option.id);
+
+              return {
+                id: optionId ?? undefined,
+                localId: optionId ? `option-${optionId}` : createLocalId(),
+                text:
+                  option.option_text?.trim() ||
+                  `Pilihan ${optionIndex + 1}`,
+              };
+            })
+          : [],
+        page: Math.max(1, Number(question.page ?? pageNumber) || pageNumber),
+        parentOptionId: parseOptionalNumber(question.parent_option_id),
+        parentOptionLocalId:
+          question.parent_option_id !== null &&
+          question.parent_option_id !== undefined
+            ? `option-${question.parent_option_id}`
+            : null,
+        text:
+          question.question_text?.trim() || `Pertanyaan ${questionIndex + 1}`,
+        type: questionType,
+      });
+    });
+  });
+
+  return {
+    questions: removeOverDepthConditionalQuestions(questions),
+    sectionTitles: Object.fromEntries(sectionTitles) as Record<number, string>,
+    status: detail.status?.trim().toLowerCase() || "draft",
+    surveyInfo: {
+      audienceMode: isPublicAudience ? "all" : "limited",
+      closesAt: toDateTimeInputValue(detail.closes_at),
+      description: detail.description ?? "",
+      estimatedTime:
+        detail.estimated_time === null || detail.estimated_time === undefined
+          ? ""
+          : String(detail.estimated_time),
+      instructions: detail.instructions ?? "",
+      opensAt: toDateTimeInputValue(detail.opens_at),
+      positions: isPublicAudience
+        ? []
+        : restrictions.filter((position) => position !== "public"),
+      title: detail.title ?? "",
+    } satisfies SurveyInfo,
+    thumbnailPreviewUrl: resolveThumbnailUrl(detail.thumbnail_path),
+  };
+};
+
 export const CreateSurvey = ({
   accountDescription,
   accountName,
+  editSurveyId = null,
   isAuthenticated,
+  mode = "create",
   onAuthAction,
   onBackHome,
   onOpenManageSurveys,
   onOpenProfile,
   onUnauthorized,
 }: CreateSurveyProps) => {
-  const storedDraft = useMemo(() => readStoredDraft(), []);
+  const draftStorageKey = useMemo(
+    () => getDraftStorageKey(mode, editSurveyId),
+    [editSurveyId, mode],
+  );
+  const storedDraft = useMemo(
+    () => readStoredDraft(draftStorageKey),
+    [draftStorageKey],
+  );
+  const surveyBasePath =
+    mode === "edit" && editSurveyId
+      ? `/surveys/edit/${editSurveyId}`
+      : "/surveys/create";
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [step, setStep] = useState<BuilderStep>(() => getStepFromUrl());
   const [surveyId, setSurveyId] = useState<number | null>(
-    storedDraft.surveyId ?? null,
+    mode === "edit" ? editSurveyId : (storedDraft.surveyId ?? null),
   );
   const [activePage, setActivePage] = useState(() =>
     getQuestionPageFromUrl(storedDraft.activePage ?? 1),
@@ -557,17 +735,24 @@ export const CreateSurvey = ({
   );
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(
+    mode === "edit" && editSurveyId !== null,
+  );
+  const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [surveyStatus, setSurveyStatus] = useState<SurveyStatus>("draft");
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState(
     defaultThumbnailPreview,
   );
   const sectionTitleInputRef = useRef<HTMLInputElement | null>(null);
   const thumbnailObjectUrl = useRef<string | null>(null);
+  const isEditingSurvey = mode === "edit" && editSurveyId !== null;
+  const isSurveyLocked = isEditingSurvey && surveyStatus !== "draft";
 
   useEffect(() => {
     localStorage.setItem(
-      DRAFT_STORAGE_KEY,
+      draftStorageKey,
       JSON.stringify({
         activePage,
         questions,
@@ -576,7 +761,80 @@ export const CreateSurvey = ({
         surveyInfo,
       }),
     );
-  }, [activePage, questions, sectionTitles, surveyId, surveyInfo]);
+  }, [activePage, draftStorageKey, questions, sectionTitles, surveyId, surveyInfo]);
+
+  useEffect(() => {
+    if (!isEditingSurvey || editSurveyId === null) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const loadSurveyDetail = async () => {
+      setIsDetailLoading(true);
+      setFeedback(null);
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/surveys/${editSurveyId}`, {
+          credentials: "include",
+          headers: authHeaders(),
+          method: "GET",
+          signal: controller.signal,
+        });
+
+        if (response.status === 401) {
+          onUnauthorized?.();
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            await getApiMessage(response, "Detail survey belum bisa dimuat."),
+          );
+        }
+
+        const result = (await response.json()) as ApiResult<SurveyDetail>;
+        const detail = result.data;
+
+        if (!detail) {
+          throw new Error("Detail survey tidak ditemukan.");
+        }
+
+        const normalizedDetail = normalizeSurveyDetail(detail);
+        setSurveyId(Number(detail.id ?? editSurveyId));
+        setSurveyInfo(normalizedDetail.surveyInfo);
+        setSectionTitles(normalizedDetail.sectionTitles);
+        setQuestions(normalizedDetail.questions);
+        setSurveyStatus(normalizedDetail.status);
+        setThumbnailPreviewUrl(normalizedDetail.thumbnailPreviewUrl);
+
+        if (normalizedDetail.status !== "draft" && getStepFromUrl() === 2) {
+          setStep(1);
+          syncStepUrl(surveyBasePath, 1, 1, true);
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        setFeedback({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Detail survey belum bisa dimuat.",
+          type: "error",
+        });
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsDetailLoading(false);
+        }
+      }
+    };
+
+    void loadSurveyDetail();
+
+    return () => controller.abort();
+  }, [editSurveyId, isEditingSurvey, onUnauthorized, surveyBasePath]);
 
   useEffect(() => {
     return () => {
@@ -587,7 +845,7 @@ export const CreateSurvey = ({
   }, []);
 
   useEffect(() => {
-    syncStepUrl(step, activePage, true);
+    syncStepUrl(surveyBasePath, step, activePage, true);
 
     const handlePopState = () => {
       setStep(getStepFromUrl());
@@ -596,7 +854,7 @@ export const CreateSurvey = ({
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [activePage, step]);
+  }, [activePage, step, surveyBasePath]);
 
   useEffect(() => {
     if (!feedback) {
@@ -687,6 +945,14 @@ export const CreateSurvey = ({
 
   const saveActiveSection = async () => {
     try {
+      if (isSurveyLocked) {
+        setFeedback({
+          message: "Section tidak dapat diubah setelah survey dipublikasikan.",
+          type: "info",
+        });
+        return;
+      }
+
       if (!isAuthenticated) {
         onUnauthorized?.();
         throw new UnauthorizedError();
@@ -743,7 +1009,7 @@ export const CreateSurvey = ({
 
   const setBuilderStep = (nextStep: BuilderStep, replace = false) => {
     setStep(nextStep);
-    syncStepUrl(nextStep, activePage, replace);
+    syncStepUrl(surveyBasePath, nextStep, activePage, replace);
   };
 
   const selectQuestionPage = (pageNumber: number) => {
@@ -751,7 +1017,7 @@ export const CreateSurvey = ({
     setActivePage(nextPage);
 
     if (step === 2) {
-      syncStepUrl(2, nextPage);
+      syncStepUrl(surveyBasePath, 2, nextPage);
     }
   };
 
@@ -821,7 +1087,7 @@ export const CreateSurvey = ({
     setFeedback(null);
   };
 
-  const validateSurveyInfo = () => {
+  const validateSurveyInfo = (options: { requireAudience?: boolean } = {}) => {
     const nextErrors: FieldErrors = {};
 
     if (surveyInfo.title.trim() === "") {
@@ -835,11 +1101,16 @@ export const CreateSurvey = ({
       nextErrors.estimatedTime = "Estimasi waktu harus lebih dari 0.";
     }
 
-    if (
+    const hasSelectedAudience =
+      surveyInfo.audienceMode === "all" || surveyInfo.positions.length > 0;
+
+    if (options.requireAudience && !hasSelectedAudience) {
+      nextErrors.positions = "Target responden harus diisi.";
+    } else if (
       surveyInfo.audienceMode === "limited" &&
       surveyInfo.positions.length === 0
     ) {
-      nextErrors.positions = "Pilih minimal satu audiens.";
+      nextErrors.positions = "Pilih minimal satu target responden.";
     }
 
     if (
@@ -892,7 +1163,12 @@ export const CreateSurvey = ({
       throw new Error("Lengkapi informasi survey terlebih dahulu.");
     }
 
-    const payload = buildSurveyPayload(surveyInfo);
+    const payload: Partial<ReturnType<typeof buildSurveyPayload>> =
+      buildSurveyPayload(surveyInfo, isEditingSurvey ? surveyStatus : "draft");
+
+    if (isSurveyLocked) {
+      delete payload.status;
+    }
 
     setIsSaving(true);
 
@@ -949,10 +1225,19 @@ export const CreateSurvey = ({
   };
 
   const goToStep = async (nextStep: BuilderStep) => {
+    if (isSurveyLocked && nextStep === 2) {
+      setFeedback({
+        message:
+          "Isi survey tidak dapat diubah setelah dipublikasikan. Anda masih bisa mengubah Informasi Umum dan Pengaturan survey.",
+        type: "info",
+      });
+      return;
+    }
+
     try {
       const targetSurveyId = await saveSurveyDraft();
 
-      if (nextStep > 1 || step > 1) {
+      if (!isSurveyLocked && (nextStep > 1 || step > 1)) {
         await saveSections(targetSurveyId);
       }
 
@@ -961,7 +1246,7 @@ export const CreateSurvey = ({
         throw new Error("Tambahkan minimal satu pertanyaan sebelum publikasi.");
       }
 
-      if (nextStep === 3) {
+      if (!isSurveyLocked && nextStep === 3) {
         await persistAllQuestions(targetSurveyId);
       }
 
@@ -1359,11 +1644,11 @@ export const CreateSurvey = ({
     try {
       const targetSurveyId = await saveSurveyDraft();
 
-      if (step > 1) {
+      if (!isSurveyLocked && step > 1) {
         await saveSections(targetSurveyId);
       }
 
-      if (questions.length > 0) {
+      if (!isSurveyLocked && questions.length > 0) {
         await persistDraftQuestions(targetSurveyId);
       }
 
@@ -1391,11 +1676,11 @@ export const CreateSurvey = ({
     try {
       const targetSurveyId = await saveSurveyDraft();
 
-      if (step > 1) {
+      if (!isSurveyLocked && step > 1) {
         await saveSections(targetSurveyId);
       }
 
-      if (questions.length > 0) {
+      if (!isSurveyLocked && questions.length > 0) {
         await persistAllQuestions(targetSurveyId);
       }
     } catch (error) {
@@ -1412,7 +1697,15 @@ export const CreateSurvey = ({
     onOpenManageSurveys?.();
   };
 
-  const publishSurvey = async () => {
+  const requestPublishSurvey = () => {
+    if (!validateSurveyInfo({ requireAudience: true })) {
+      setFeedback({
+        message: "Lengkapi pengaturan survey sebelum publikasi.",
+        type: "error",
+      });
+      return;
+    }
+
     if (questions.length === 0) {
       setFieldErrors({ questions: "Tambahkan minimal satu pertanyaan." });
       setFeedback({
@@ -1422,6 +1715,28 @@ export const CreateSurvey = ({
       return;
     }
 
+    setIsPublishConfirmOpen(true);
+  };
+
+  const publishSurvey = async () => {
+    if (!validateSurveyInfo({ requireAudience: true })) {
+      setFeedback({
+        message: "Lengkapi pengaturan survey sebelum publikasi.",
+        type: "error",
+      });
+      return;
+    }
+
+    if (questions.length === 0) {
+      setFieldErrors({ questions: "Tambahkan minimal satu pertanyaan." });
+      setFeedback({
+        message: "Tambahkan minimal satu pertanyaan sebelum publikasi.",
+        type: "error",
+      });
+      return;
+    }
+
+    setIsPublishConfirmOpen(false);
     setIsSaving(true);
 
     try {
@@ -1443,7 +1758,7 @@ export const CreateSurvey = ({
         "Survey belum bisa dipublikasikan.",
       );
 
-      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      localStorage.removeItem(draftStorageKey);
       setFeedback({
         message: "Survey berhasil dipublikasikan.",
         type: "success",
@@ -1543,6 +1858,32 @@ export const CreateSurvey = ({
     </section>
   );
 
+  const resetSurveySchedule = () => {
+    setSurveyInfo((current) => ({
+      ...current,
+      closesAt: "",
+      opensAt: "",
+    }));
+    setFieldErrors((current) => {
+      const nextErrors = { ...current };
+      delete nextErrors.closesAt;
+      delete nextErrors.opensAt;
+      return nextErrors;
+    });
+  };
+
+  const resetEstimatedTime = () => {
+    setSurveyInfo((current) => ({
+      ...current,
+      estimatedTime: "",
+    }));
+    setFieldErrors((current) => {
+      const nextErrors = { ...current };
+      delete nextErrors.estimatedTime;
+      return nextErrors;
+    });
+  };
+
   const renderStepSettings = () => (
     <section
       className="create-settings-grid"
@@ -1550,8 +1891,13 @@ export const CreateSurvey = ({
     >
       <div className="create-settings-card">
         <header>
-          <img src={calendarIcon} alt="" aria-hidden="true" />
-          <h2>Jadwal Survey</h2>
+          <span>
+            <img src={calendarIcon} alt="" aria-hidden="true" />
+            <h2>Jadwal Survey</h2>
+          </span>
+          <button onClick={resetSurveySchedule} type="button">
+            Reset
+          </button>
         </header>
         <div className="create-settings-card__grid">
           <label className="create-survey-field">
@@ -1576,7 +1922,12 @@ export const CreateSurvey = ({
             {fieldErrors.closesAt && <small>{fieldErrors.closesAt}</small>}
           </label>
           <label className="create-survey-field create-survey-field--wide">
-            <span>Estimasi Waktu</span>
+            <span className="create-survey-field__label-row">
+              Estimasi Waktu
+              <button onClick={resetEstimatedTime} type="button">
+                Reset
+              </button>
+            </span>
             <input
               aria-label="Estimasi waktu dalam menit"
               min="1"
@@ -1596,8 +1947,10 @@ export const CreateSurvey = ({
 
       <div className="create-settings-card">
         <header>
-          <img src={targetIcon} alt="" aria-hidden="true" />
-          <h2>Target Responden</h2>
+          <span>
+            <img src={targetIcon} alt="" aria-hidden="true" />
+            <h2>Target Responden</h2>
+          </span>
         </header>
         <div className="create-survey-audience">
           <span>Pilih Audiens</span>
@@ -1928,6 +2281,13 @@ export const CreateSurvey = ({
     );
   };
 
+  const pageTitle = isEditingSurvey ? "Edit Survey" : "Buat Survey Baru";
+  const surveyBadge = isEditingSurvey
+    ? `${surveyStatus === "draft" ? "Draft" : "Published"} #${surveyId ?? editSurveyId}`
+    : surveyId
+      ? `Draft #${surveyId}`
+      : "Draft baru";
+
   const renderBreadcrumbs = () => {
     if (step === 1) {
       return (
@@ -1948,7 +2308,7 @@ export const CreateSurvey = ({
         <span aria-hidden="true">{">"}</span>
         <span>Kelola Survey</span>
         <span aria-hidden="true">{">"}</span>
-        <strong>Buat Survey Baru</strong>
+        <strong>{pageTitle}</strong>
       </div>
     );
   };
@@ -1958,15 +2318,18 @@ export const CreateSurvey = ({
       {([1, 2, 3] as BuilderStep[]).map((stepNumber, index) => {
         const isComplete = stepNumber < step;
         const isActive = stepNumber === step;
+        const isDisabled = isSurveyLocked && stepNumber === 2;
 
         return (
           <button
             className={[
               isActive ? "is-active" : "",
               isComplete ? "is-complete" : "",
+              isDisabled ? "is-disabled" : "",
             ]
               .filter(Boolean)
               .join(" ")}
+            aria-disabled={isDisabled}
             key={stepNumber}
             onClick={() => void goToStep(stepNumber)}
             type="button"
@@ -1985,6 +2348,54 @@ export const CreateSurvey = ({
       })}
     </nav>
   );
+
+  const renderPublishDialog = () => {
+    if (!isPublishConfirmOpen) {
+      return null;
+    }
+
+    return (
+      <div className="create-survey-dialog" role="presentation">
+        <button
+          aria-label="Batalkan publikasi survey"
+          className="create-survey-dialog__backdrop"
+          onClick={() => setIsPublishConfirmOpen(false)}
+          type="button"
+        />
+        <section
+          aria-labelledby="publish-survey-title"
+          aria-modal="true"
+          className="create-survey-dialog__panel"
+          role="dialog"
+        >
+          <h2 id="publish-survey-title">
+            Apakah anda yakin ingin mempublikasikan survey ini?
+          </h2>
+          <p>
+            Form/isi survey tidak dapat diubah setelah dipublikasikan, namun
+            Anda masih bisa mengubah bagian Informasi Umum dan Pengaturan
+            survey.
+          </p>
+          <div className="create-survey-dialog__actions">
+            <button
+              disabled={isSaving}
+              onClick={() => setIsPublishConfirmOpen(false)}
+              type="button"
+            >
+              Batal
+            </button>
+            <button
+              disabled={isSaving}
+              onClick={() => void publishSurvey()}
+              type="button"
+            >
+              {isSaving ? "Mempublikasikan..." : "Publikasikan"}
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  };
 
   return (
     <main className="create-survey-page">
@@ -2011,18 +2422,18 @@ export const CreateSurvey = ({
       />
 
       <section className="create-survey-shell">
-        <div className="create-survey-content">
+        <div className="create-survey-content" aria-busy={isDetailLoading}>
           <header className="create-survey-heading">
             <div>
               {renderBreadcrumbs()}
-              <h1>Buat Survey Baru</h1>
+              <h1>{pageTitle}</h1>
               <p>
                 {step === 1
                   ? stepCopy[step].description
                   : stepCopy[step].subtitle}
               </p>
             </div>
-            <span>{surveyId ? `Draft #${surveyId}` : "Draft baru"}</span>
+            <span>{surveyBadge}</span>
           </header>
 
           {renderStepIndicator()}
@@ -2060,7 +2471,9 @@ export const CreateSurvey = ({
               onClick={() =>
                 step < 3
                   ? void leaveBuilder()
-                  : void goToStep((step - 1) as BuilderStep)
+                  : void goToStep(
+                      isSurveyLocked ? 1 : ((step - 1) as BuilderStep),
+                    )
               }
               type="button"
             >
@@ -2070,48 +2483,65 @@ export const CreateSurvey = ({
               {step === 3 ? "Kembali" : "Batal"}
             </button>
             <div>
-              <button
-                disabled={isSaving}
-                onClick={() => void saveDraftOnly()}
-                type="button"
-              >
-                Simpan Draft
-              </button>
-            {step < 3 ? (
-              <button
-                disabled={isSaving}
-                onClick={() => void goToStep((step + 1) as BuilderStep)}
-                type="button"
-              >
-                {isSaving ? (
-                  "Menyimpan..."
-                ) : (
-                  <>
-                    Selanjutnya
-                    <img src={arrowRightIcon} alt="" aria-hidden="true" />
-                  </>
-                )}
-              </button>
-            ) : (
-              <button
-                disabled={isSaving}
-                onClick={() => void publishSurvey()}
-                type="button"
-              >
-                {isSaving ? (
-                  "Mempublikasikan..."
-                ) : (
-                  <>
-                    Publikasikan Survey
-                    <img src={publishIcon} alt="" aria-hidden="true" />
-                  </>
-                )}
-              </button>
-            )}
+              {!(isSurveyLocked && step === 3) && (
+                <button
+                  disabled={isSaving}
+                  onClick={() => void saveDraftOnly()}
+                  type="button"
+                >
+                  {isEditingSurvey ? "Simpan Perubahan" : "Simpan Draft"}
+                </button>
+              )}
+              {step < 3 ? (
+                <button
+                  disabled={isSaving}
+                  onClick={() =>
+                    void goToStep(
+                      isSurveyLocked && step === 1
+                        ? 3
+                        : ((step + 1) as BuilderStep),
+                    )
+                  }
+                  type="button"
+                >
+                  {isSaving ? (
+                    "Menyimpan..."
+                  ) : (
+                    <>
+                      Selanjutnya
+                      <img src={arrowRightIcon} alt="" aria-hidden="true" />
+                    </>
+                  )}
+                </button>
+              ) : isSurveyLocked ? (
+                <button
+                  disabled={isSaving}
+                  onClick={() => void saveDraftOnly()}
+                  type="button"
+                >
+                  {isSaving ? "Menyimpan..." : "Simpan Perubahan"}
+                </button>
+              ) : (
+                <button
+                  disabled={isSaving}
+                  onClick={requestPublishSurvey}
+                  type="button"
+                >
+                  {isSaving ? (
+                    "Mempublikasikan..."
+                  ) : (
+                    <>
+                      Publikasikan Survey
+                      <img src={publishIcon} alt="" aria-hidden="true" />
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </footer>
         </div>
       </section>
+      {renderPublishDialog()}
     </main>
   );
 };

@@ -19,6 +19,7 @@ type ManageSurveysProps = {
   onAuthAction?: () => void;
   onBackHome?: () => void;
   onCreateSurvey?: () => void;
+  onEditSurvey?: (surveyId: number) => void;
   onOpenProfile?: () => void;
   onUnauthorized?: () => void;
 };
@@ -61,6 +62,11 @@ type ManageSurvey = {
   title: string;
 };
 
+type ConfirmDeleteSurvey = {
+  id: number | string;
+  title: string;
+};
+
 type PaginationMeta = {
   page: number;
   perPage: number;
@@ -93,7 +99,7 @@ const STATUS_LABELS: Record<string, string> = {
 const POSITION_LABELS: Record<string, string> = {
   asn: "Pegawai ASN",
   non_asn: "Pegawai Non-ASN",
-  public: "Masyarakat",
+  public: "Masyarakat Umum",
 };
 
 const getStoredToken = () =>
@@ -117,12 +123,15 @@ const parseNumber = (value: number | string | null | undefined, fallback = 0) =>
   return fallback;
 };
 
-const getApiMessage = async (response: Response) => {
+const getApiMessage = async (
+  response: Response,
+  fallback = "Data kelola survey belum bisa dimuat.",
+) => {
   try {
     const result = (await response.json()) as ManageSurveyApiResult;
-    return result.message ?? "Data kelola survey belum bisa dimuat.";
+    return result.message ?? fallback;
   } catch {
-    return "Data kelola survey belum bisa dimuat.";
+    return fallback;
   }
 };
 
@@ -174,12 +183,14 @@ const formatPeriod = (opensAt?: string | null, closesAt?: string | null) => {
   return `${start} - ${end}`;
 };
 
-const formatPositions = (positions: string[]) => {
-  if (positions.length === 0) {
-    return "umum";
+const getPositionBadges = (positions: string[]) => {
+  if (positions.length === 0 || positions.includes("public")) {
+    return ["Masyarakat Umum"];
   }
 
-  return positions.map((position) => POSITION_LABELS[position] ?? position).join(", ");
+  return Array.from(
+    new Set(positions.map((position) => POSITION_LABELS[position] ?? position)),
+  );
 };
 
 const getStatusLabel = (status: string) => STATUS_LABELS[status] ?? status;
@@ -321,6 +332,7 @@ export const ManageSurveys = ({
   onAuthAction,
   onBackHome,
   onCreateSurvey,
+  onEditSurvey,
   onOpenProfile,
   onUnauthorized,
 }: ManageSurveysProps) => {
@@ -336,7 +348,11 @@ export const ManageSurveys = ({
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<ConfirmDeleteSurvey | null>(
+    null,
+  );
   const [isPerPageOpen, setIsPerPageOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
@@ -494,6 +510,43 @@ export const ManageSurveys = ({
     setPage(1);
   };
 
+  const handleDeleteSurvey = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setFeedbackMessage("");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/surveys/${deleteTarget.id}`, {
+        credentials: "include",
+        headers: authHeaders(),
+        method: "DELETE",
+      });
+
+      if (response.status === 401) {
+        onUnauthorized?.();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(await getApiMessage(response, "Survey belum bisa dihapus."));
+      }
+
+      setDeleteTarget(null);
+      setFeedbackMessage("Survey berhasil dihapus.");
+      const controller = new AbortController();
+      await fetchSurveys(controller.signal);
+    } catch (error) {
+      setFeedbackMessage(
+        error instanceof Error ? error.message : "Survey belum bisa dihapus.",
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const goToPreviousPage = () => {
     setPage((current) => Math.max(1, current - 1));
   };
@@ -567,7 +620,7 @@ export const ManageSurveys = ({
                   value={positionFilter}
                 >
                   <option value="">Audiens</option>
-                  <option value="public">Masyarakat</option>
+                  <option value="public">Masyarakat Umum</option>
                   <option value="asn">Pegawai ASN</option>
                   <option value="non_asn">Pegawai Non-ASN</option>
                 </select>
@@ -681,7 +734,13 @@ export const ManageSurveys = ({
                           <strong>{survey.title}</strong>
                         </td>
                         <td>{formatPeriod(survey.opensAt, survey.closesAt)}</td>
-                        <td>{formatPositions(survey.positions)}</td>
+                        <td>
+                          <div className="manage-survey-audience-badges">
+                            {getPositionBadges(survey.positions).map((label) => (
+                              <span key={label}>{label}</span>
+                            ))}
+                          </div>
+                        </td>
                         <td>
                           <span
                             className={`manage-survey-status manage-survey-status--${survey.status}`}
@@ -694,11 +753,7 @@ export const ManageSurveys = ({
                           <div className="manage-survey-actions">
                             <button
                               aria-label={`Ubah ${survey.title}`}
-                              onClick={() =>
-                                setFeedbackMessage(
-                                  "Form edit survey belum tersedia.",
-                                )
-                              }
+                              onClick={() => onEditSurvey?.(Number(survey.id))}
                               type="button"
                             >
                               <img src={editIcon} alt="" aria-hidden="true" />
@@ -706,9 +761,10 @@ export const ManageSurveys = ({
                             <button
                               aria-label={`Hapus ${survey.title}`}
                               onClick={() =>
-                                setFeedbackMessage(
-                                  "Konfirmasi hapus survey belum tersedia.",
-                                )
+                                setDeleteTarget({
+                                  id: survey.id,
+                                  title: survey.title,
+                                })
                               }
                               type="button"
                             >
@@ -772,6 +828,45 @@ export const ManageSurveys = ({
           </section>
         </div>
       </section>
+
+      {deleteTarget && (
+        <div className="manage-survey-dialog" role="presentation">
+          <button
+            aria-label="Batalkan hapus survey"
+            className="manage-survey-dialog__backdrop"
+            onClick={() => setDeleteTarget(null)}
+            type="button"
+          />
+          <section
+            aria-labelledby="delete-survey-title"
+            aria-modal="true"
+            className="manage-survey-dialog__panel"
+            role="dialog"
+          >
+            <h2 id="delete-survey-title">Hapus survey?</h2>
+            <p>
+              Survey "{deleteTarget.title}" akan dihapus permanen beserta data
+              isinya. Tindakan ini tidak dapat dibatalkan.
+            </p>
+            <div className="manage-survey-dialog__actions">
+              <button
+                disabled={isDeleting}
+                onClick={() => setDeleteTarget(null)}
+                type="button"
+              >
+                Batal
+              </button>
+              <button
+                disabled={isDeleting}
+                onClick={() => void handleDeleteSurvey()}
+                type="button"
+              >
+                {isDeleting ? "Menghapus..." : "Hapus Survey"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 };
