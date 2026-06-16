@@ -9,6 +9,7 @@ import { ChangePassword } from "./pages/profile/ChangePassword";
 import { Profile } from "./pages/profile/Profile";
 import { CreateSurvey } from "./pages/survey/CreateSurvey";
 import { ManageSurveys } from "./pages/survey/ManageSurveys";
+import { SurveyDetail } from "./pages/survey/SurveyDetail";
 import { SurveyList } from "./pages/survey/SurveyList";
 import { API_BASE_URL } from "./lib/api";
 
@@ -23,6 +24,7 @@ type AuthPage =
   | "profile"
   | "register"
   | "reset-password"
+  | "survey-detail"
   | "survey-list";
 
 const AUTH_SESSION_KEY = "survey_auth_session";
@@ -49,11 +51,13 @@ const PAGE_PATHS: Record<AuthPage, string> = {
   profile: "/profile",
   register: "/register",
   "reset-password": "/reset-password",
+  "survey-detail": "/surveys",
   "survey-list": "/surveys",
 };
 
 const CREATE_SURVEY_BASE_PATH = "/surveys/create";
 const EDIT_SURVEY_PATH_PATTERN = /^\/surveys\/edit\/(\d+)(?:\/.*)?$/;
+const SURVEY_DETAIL_PATH_PATTERN = /^\/surveys\/(\d+)$/;
 
 const isCreateSurveyPath = (path: string) =>
   path === CREATE_SURVEY_BASE_PATH ||
@@ -66,6 +70,15 @@ const getEditSurveyIdFromPath = (path = window.location.pathname) => {
 };
 
 const isEditSurveyPath = (path: string) => getEditSurveyIdFromPath(path) !== null;
+
+const getSurveyDetailIdFromPath = (path = window.location.pathname) => {
+  const [, surveyId] = path.match(SURVEY_DETAIL_PATH_PATTERN) ?? [];
+  const parsedSurveyId = Number(surveyId);
+  return Number.isFinite(parsedSurveyId) ? parsedSurveyId : null;
+};
+
+const isSurveyDetailPath = (path: string) =>
+  getSurveyDetailIdFromPath(path) !== null;
 
 const hasStoredAuth = () =>
   Boolean(
@@ -128,6 +141,10 @@ const getInitialAuthPage = (): AuthPage => {
     return "survey-list";
   }
 
+  if (isSurveyDetailPath(normalizedPath)) {
+    return "survey-detail";
+  }
+
   if (normalizedPath === PAGE_PATHS.login) {
     return "login";
   }
@@ -160,6 +177,13 @@ const syncUrl = (page: AuthPage, replace = false) => {
   if (
     page === "edit-survey" &&
     isEditSurveyPath(url.pathname.replace(/\/+$/, ""))
+  ) {
+    return;
+  }
+
+  if (
+    page === "survey-detail" &&
+    isSurveyDetailPath(url.pathname.replace(/\/+$/, ""))
   ) {
     return;
   }
@@ -201,6 +225,9 @@ function App() {
   const [editSurveyId, setEditSurveyId] = useState<number | null>(() =>
     getEditSurveyIdFromPath(),
   );
+  const [surveyDetailId, setSurveyDetailId] = useState<number | null>(() =>
+    getSurveyDetailIdFromPath(),
+  );
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(
     null,
   );
@@ -213,6 +240,7 @@ function App() {
       const nextResetToken = getResetToken();
       setResetToken(nextResetToken);
       setEditSurveyId(getEditSurveyIdFromPath());
+      setSurveyDetailId(getSurveyDetailIdFromPath());
       setAuthPage(getInitialAuthPage());
     };
 
@@ -227,6 +255,10 @@ function App() {
 
     if (page !== "edit-survey") {
       setEditSurveyId(null);
+    }
+
+    if (page !== "survey-detail") {
+      setSurveyDetailId(null);
     }
 
     setAuthPage(page);
@@ -353,6 +385,23 @@ function App() {
     navigate("survey-list");
   }, [navigate]);
 
+  const openSurveyDetail = useCallback((surveyId: number | string) => {
+    const parsedSurveyId = Number(surveyId);
+
+    if (!Number.isFinite(parsedSurveyId)) {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    url.pathname = `/surveys/${parsedSurveyId}`;
+    url.search = "";
+    url.hash = "";
+    window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    setSurveyDetailId(parsedSurveyId);
+    setResetToken(null);
+    setAuthPage("survey-detail");
+  }, []);
+
   const openCreateSurvey = useCallback(() => {
     if (isAuthenticated) {
       navigate("create-survey");
@@ -461,7 +510,25 @@ function App() {
         onOpenManageSurveys={openManageSurveys}
         onOpenProfile={openProfile}
         accountPosition={accountProfile?.position}
+        onOpenSurveyDetail={openSurveyDetail}
         onUnauthorized={handleUnauthorized}
+      />,
+    );
+  }
+
+  if (authPage === "survey-detail") {
+    return withLogoutDialog(
+      <SurveyDetail
+        accountDescription={accountDescription}
+        accountName={accountName}
+        isAuthenticated={isAuthenticated}
+        onAuthAction={handleAuthAction}
+        onBackHome={openHome}
+        onOpenManageSurveys={openManageSurveys}
+        onOpenProfile={openProfile}
+        onOpenSurveyList={openSurveyList}
+        onUnauthorized={handleUnauthorized}
+        surveyId={surveyDetailId}
       />,
     );
   }

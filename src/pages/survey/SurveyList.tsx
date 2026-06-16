@@ -25,6 +25,7 @@ type SurveyListProps = {
   onBackHome?: () => void;
   onOpenManageSurveys?: () => void;
   onOpenProfile?: () => void;
+  onOpenSurveyDetail?: (surveyId: number | string) => void;
   onUnauthorized?: () => void;
 };
 
@@ -312,6 +313,7 @@ export const SurveyList = ({
   onBackHome,
   onOpenManageSurveys,
   onOpenProfile,
+  onOpenSurveyDetail,
   onUnauthorized,
 }: SurveyListProps) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -481,34 +483,13 @@ export const SurveyList = ({
     setIsLimitOpen(false);
   };
 
-  const handleStartSurvey = async (survey: SurveyCard) => {
+  const handleOpenSurveyDetail = (survey: SurveyCard) => {
     if (survey.status !== "open") {
       setFeedbackMessage("Survey ini belum dapat diisi.");
       return;
     }
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/surveys/${survey.id}/form`, {
-        credentials: "include",
-        headers: authHeaders(),
-        method: "GET",
-      });
-
-      if (response.status === 401) {
-        onUnauthorized?.();
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error("Form survey belum bisa dibuka.");
-      }
-
-      setFeedbackMessage("Form survey siap dibuka.");
-    } catch (error) {
-      setFeedbackMessage(
-        error instanceof Error ? error.message : "Form survey belum bisa dibuka.",
-      );
-    }
+    onOpenSurveyDetail?.(survey.id);
   };
 
   return (
@@ -666,7 +647,7 @@ export const SurveyList = ({
                       </span>
                       <button
                         disabled={survey.status !== "open"}
-                        onClick={() => void handleStartSurvey(survey)}
+                        onClick={() => handleOpenSurveyDetail(survey)}
                         type="button"
                       >
                         {survey.status === "open" ? "Mulai Survei" : "Belum Aktif"}
