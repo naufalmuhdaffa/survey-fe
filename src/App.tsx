@@ -9,6 +9,7 @@ import { ChangePassword } from "./pages/profile/ChangePassword";
 import { Profile } from "./pages/profile/Profile";
 import { CreateSurvey } from "./pages/survey/CreateSurvey";
 import { ManageSurveys } from "./pages/survey/ManageSurveys";
+import { SurveyList } from "./pages/survey/SurveyList";
 import { API_BASE_URL } from "./lib/api";
 
 type AuthPage =
@@ -21,7 +22,8 @@ type AuthPage =
   | "manage-surveys"
   | "profile"
   | "register"
-  | "reset-password";
+  | "reset-password"
+  | "survey-list";
 
 const AUTH_SESSION_KEY = "survey_auth_session";
 const AUTH_TOKEN_KEY = "survey_auth_token";
@@ -46,6 +48,7 @@ const PAGE_PATHS: Record<AuthPage, string> = {
   profile: "/profile",
   register: "/register",
   "reset-password": "/reset-password",
+  "survey-list": "/surveys",
 };
 
 const CREATE_SURVEY_BASE_PATH = "/surveys/create";
@@ -118,6 +121,10 @@ const getInitialAuthPage = (): AuthPage => {
 
   if (normalizedPath === PAGE_PATHS["manage-surveys"]) {
     return "manage-surveys";
+  }
+
+  if (normalizedPath === PAGE_PATHS["survey-list"]) {
+    return "survey-list";
   }
 
   if (normalizedPath === PAGE_PATHS.login) {
@@ -341,6 +348,10 @@ function App() {
     goToLogin();
   }, [goToLogin, isAuthenticated, navigate]);
 
+  const openSurveyList = useCallback(() => {
+    navigate("survey-list");
+  }, [navigate]);
+
   const openCreateSurvey = useCallback(() => {
     if (isAuthenticated) {
       navigate("create-survey");
@@ -433,6 +444,22 @@ function App() {
         onAuthAction={handleAuthAction}
         onOpenManageSurveys={openManageSurveys}
         onOpenProfile={openProfile}
+        onOpenSurveyList={openSurveyList}
+      />,
+    );
+  }
+
+  if (authPage === "survey-list") {
+    return withLogoutDialog(
+      <SurveyList
+        accountDescription={accountDescription}
+        accountName={accountName}
+        isAuthenticated={isAuthenticated}
+        onAuthAction={handleAuthAction}
+        onBackHome={openHome}
+        onOpenManageSurveys={openManageSurveys}
+        onOpenProfile={openProfile}
+        onUnauthorized={handleUnauthorized}
       />,
     );
   }
@@ -447,6 +474,7 @@ function App() {
         onBackHome={openHome}
         onOpenChangePassword={openChangePassword}
         onOpenManageSurveys={openManageSurveys}
+        onOpenSurveyList={openSurveyList}
         onProfileLoaded={setAccountProfile}
         onUnauthorized={handleUnauthorized}
       />,
@@ -463,6 +491,7 @@ function App() {
         onBackHome={openHome}
         onCreateSurvey={openCreateSurvey}
         onEditSurvey={openEditSurvey}
+        onOpenSurveyList={openSurveyList}
         onOpenProfile={openProfile}
         onUnauthorized={handleUnauthorized}
       />,
@@ -479,6 +508,7 @@ function App() {
         onBackHome={openHome}
         onOpenManageSurveys={openManageSurveys}
         onOpenProfile={openProfile}
+        onOpenSurveyList={openSurveyList}
         onUnauthorized={handleUnauthorized}
       />,
     );
@@ -496,6 +526,7 @@ function App() {
         onBackHome={openHome}
         onOpenManageSurveys={openManageSurveys}
         onOpenProfile={openProfile}
+        onOpenSurveyList={openSurveyList}
         onUnauthorized={handleUnauthorized}
       />,
     );

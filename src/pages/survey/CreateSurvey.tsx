@@ -34,6 +34,7 @@ type CreateSurveyProps = {
   onBackHome?: () => void;
   onOpenManageSurveys?: () => void;
   onOpenProfile?: () => void;
+  onOpenSurveyList?: () => void;
   onUnauthorized?: () => void;
 };
 
@@ -695,6 +696,7 @@ export const CreateSurvey = ({
   onBackHome,
   onOpenManageSurveys,
   onOpenProfile,
+  onOpenSurveyList,
   onUnauthorized,
 }: CreateSurveyProps) => {
   const draftStorageKey = useMemo(
@@ -889,6 +891,10 @@ export const CreateSurvey = ({
 
     if (label === "Dashboard") {
       onBackHome?.();
+    }
+
+    if (label === "Daftar Survey") {
+      onOpenSurveyList?.();
     }
 
     if (label === "Kelola Survey") {

@@ -21,6 +21,7 @@ type ManageSurveysProps = {
   onCreateSurvey?: () => void;
   onEditSurvey?: (surveyId: number) => void;
   onOpenProfile?: () => void;
+  onOpenSurveyList?: () => void;
   onUnauthorized?: () => void;
 };
 
@@ -334,6 +335,7 @@ export const ManageSurveys = ({
   onCreateSurvey,
   onEditSurvey,
   onOpenProfile,
+  onOpenSurveyList,
   onUnauthorized,
 }: ManageSurveysProps) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -472,6 +474,10 @@ export const ManageSurveys = ({
 
     if (label === "Dashboard") {
       onBackHome?.();
+    }
+
+    if (label === "Daftar Survey") {
+      onOpenSurveyList?.();
     }
   };
 

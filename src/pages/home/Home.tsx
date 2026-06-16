@@ -22,6 +22,7 @@ type HomeProps = {
   onAuthAction?: () => void;
   onOpenManageSurveys?: () => void;
   onOpenProfile?: () => void;
+  onOpenSurveyList?: () => void;
 };
 
 type SurveyApiItem = {
@@ -230,6 +231,7 @@ export const Home = ({
   onAuthAction,
   onOpenManageSurveys,
   onOpenProfile,
+  onOpenSurveyList,
 }: HomeProps) => {
   const [surveys, setSurveys] = useState<SurveyCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -256,7 +258,11 @@ export const Home = ({
         }
 
         const result = (await response.json()) as SurveyApiResult;
-        setSurveys(extractSurveys(result).map(normalizeSurvey));
+        setSurveys(
+          extractSurveys(result)
+            .map(normalizeSurvey)
+            .filter((survey) => survey.status?.toLowerCase() === "open"),
+        );
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
@@ -293,6 +299,10 @@ export const Home = ({
 
   const handleSidebarNavigation = (label: string) => {
     closeSidebar();
+
+    if (label === "Daftar Survey") {
+      onOpenSurveyList?.();
+    }
 
     if (label === "Kelola Survey") {
       onOpenManageSurveys?.();
@@ -351,7 +361,7 @@ export const Home = ({
                   Anda.
                 </p>
               </div>
-              <button type="button">
+              <button onClick={onOpenSurveyList} type="button">
                 <span>Lihat Semua</span>
                 <img src={arrowRightIcon} alt="" aria-hidden="true" />
               </button>
