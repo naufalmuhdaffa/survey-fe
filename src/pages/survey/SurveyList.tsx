@@ -65,7 +65,6 @@ const POSITION_LABELS: Record<string, string> = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  draft: "Draft",
   open: "Open",
   upcoming: "Upcoming",
 };
@@ -104,13 +103,13 @@ const fallbackSurveys: SurveyCard[] = [
   {
     closesAt: "2026-12-08",
     description:
-      "Draft survei untuk memetakan kebutuhan responden sebelum dipublikasikan kepada target audiens yang sesuai.",
+      "Survei untuk memetakan kebutuhan responden sebelum layanan digital terbaru dibuka untuk audiens yang sesuai.",
     estimatedTime: 6,
-    id: "fallback-draft",
+    id: "fallback-upcoming-opd",
     image: surveyIllustration,
     opensAt: "2026-11-08",
     positions: ["asn", "non_asn"],
-    status: "draft",
+    status: "upcoming",
     title: "Pemetaan Kebutuhan Layanan Digital OPD",
   },
 ];
@@ -177,7 +176,7 @@ const normalizeSurvey = (survey: SurveyApiItem): SurveyCard => ({
   image: survey.thumbnail_path ?? survey.thumbnail,
   opensAt: survey.opens_at,
   positions: normalizePositions(survey.positions),
-  status: survey.status?.trim().toLowerCase() || "draft",
+  status: survey.status?.trim().toLowerCase() || "upcoming",
   title: survey.title?.trim() || "Survey Pemerintah Kota Yogyakarta",
 });
 
@@ -229,6 +228,9 @@ const getEndDateLabel = (closesAt?: string | null) => {
 };
 
 const getStatusLabel = (status: string) => STATUS_LABELS[status] ?? status;
+
+const isPublicSurveyStatus = (status: string) =>
+  status === "open" || status === "upcoming";
 
 const normalizeAccountPosition = (position?: string | null) => {
   const normalizedPosition = position?.trim().toLowerCase();
@@ -374,7 +376,7 @@ export const SurveyList = ({
         const result = (await response.json()) as SurveyApiResult;
         const nextSurveys = extractSurveys(result)
           .map(normalizeSurvey)
-          .filter((survey) => survey.status !== "closed");
+          .filter((survey) => isPublicSurveyStatus(survey.status));
 
         setSurveys(nextSurveys);
         setHasLoadError(false);
@@ -413,7 +415,7 @@ export const SurveyList = ({
       const matchesStatus = !statusFilter || survey.status === statusFilter;
 
       return (
-        survey.status !== "closed" &&
+        isPublicSurveyStatus(survey.status) &&
         matchesSearch &&
         matchesStatus &&
         matchesPosition(survey, positionFilter)
@@ -582,7 +584,6 @@ export const SurveyList = ({
                   <option value="">Status</option>
                   <option value="open">Open</option>
                   <option value="upcoming">Upcoming</option>
-                  <option value="draft">Draft</option>
                 </select>
               </label>
 
