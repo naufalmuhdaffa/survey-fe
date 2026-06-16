@@ -130,10 +130,12 @@
   padding: 4px 8px;
   text-transform: uppercase;
 
-  img {
-    height: 11.67px;
+  .survey-detail-status__icon {
+    display: block;
+    flex: 0 0 11.667px;
+    height: 11.667px;
     object-fit: contain;
-    width: 11.67px;
+    width: 11.667px;
   }
 }
 
@@ -209,11 +211,25 @@
     line-height: 24px;
     text-transform: uppercase;
 
-    img {
+    .survey-detail-meta__icon {
+      display: block;
       flex: 0 0 auto;
-      max-height: 21px;
       object-fit: contain;
-      width: 20px;
+    }
+
+    .survey-detail-meta__icon--period {
+      height: 20px;
+      width: 18px;
+    }
+
+    .survey-detail-meta__icon--audience {
+      height: 12px;
+      width: 24px;
+    }
+
+    .survey-detail-meta__icon--estimate {
+      height: 21px;
+      width: 18px;
     }
   }
 
@@ -254,8 +270,11 @@
     padding: 16px 32px;
     width: min(320px, 100%);
 
-    img {
+    .survey-detail-action__icon {
+      display: block;
+      flex: 0 0 11px;
       height: 14px;
+      object-fit: contain;
       width: 11px;
     }
 
@@ -289,10 +308,12 @@
     gap: 16px;
   }
 
-  > div:first-child > img {
+  .survey-detail-help__icon {
+    display: block;
+    flex: 0 0 26.667px;
     height: 24px;
     object-fit: contain;
-    width: 27px;
+    width: 26.667px;
   }
 
   h2 {
@@ -321,8 +342,20 @@
     text-decoration: none;
     white-space: nowrap;
 
-    img {
+    .survey-detail-contact__icon {
+      display: block;
+      flex: 0 0 auto;
       object-fit: contain;
+    }
+
+    .survey-detail-contact__icon--email {
+      height: 12px;
+      width: 15px;
+    }
+
+    .survey-detail-contact__icon--phone {
+      height: 13.5px;
+      width: 13.5px;
     }
 
     &:hover,

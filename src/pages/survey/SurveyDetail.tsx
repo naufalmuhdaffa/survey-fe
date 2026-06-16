@@ -427,7 +427,12 @@ export const SurveyDetail = ({
               <span
                 className={`survey-detail-status survey-detail-status--${survey.status}`}
               >
-                <img src={statusIcon} alt="" aria-hidden="true" />
+                <img
+                  className="survey-detail-status__icon"
+                  src={statusIcon}
+                  alt=""
+                  aria-hidden="true"
+                />
                 {getStatusLabel(survey.status)}
               </span>
               <h1 id="survey-detail-title">{survey.title}</h1>
@@ -450,21 +455,36 @@ export const SurveyDetail = ({
             <dl className="survey-detail-meta">
               <div>
                 <dt>
-                  <img src={periodIcon} alt="" aria-hidden="true" />
+                  <img
+                    className="survey-detail-meta__icon survey-detail-meta__icon--period"
+                    src={periodIcon}
+                    alt=""
+                    aria-hidden="true"
+                  />
                   Periode
                 </dt>
                 <dd>{formatPeriod(survey.opensAt, survey.closesAt)}</dd>
               </div>
               <div>
                 <dt>
-                  <img src={audienceIcon} alt="" aria-hidden="true" />
+                  <img
+                    className="survey-detail-meta__icon survey-detail-meta__icon--audience"
+                    src={audienceIcon}
+                    alt=""
+                    aria-hidden="true"
+                  />
                   Audiens
                 </dt>
                 <dd>{survey.audience}</dd>
               </div>
               <div>
                 <dt>
-                  <img src={estimateIcon} alt="" aria-hidden="true" />
+                  <img
+                    className="survey-detail-meta__icon survey-detail-meta__icon--estimate"
+                    src={estimateIcon}
+                    alt=""
+                    aria-hidden="true"
+                  />
                   Estimasi
                 </dt>
                 <dd>{estimatedTime}</dd>
@@ -478,14 +498,24 @@ export const SurveyDetail = ({
                 type="button"
               >
                 {isSurveyOpen ? "Mulai Isi Survey Sekarang" : "Survey Belum Dibuka"}
-                <img src={arrowIcon} alt="" aria-hidden="true" />
+                <img
+                  className="survey-detail-action__icon"
+                  src={arrowIcon}
+                  alt=""
+                  aria-hidden="true"
+                />
               </button>
             </div>
           </section>
 
           <aside className="survey-detail-help">
             <div>
-              <img src={helpIcon} alt="" aria-hidden="true" />
+              <img
+                className="survey-detail-help__icon"
+                src={helpIcon}
+                alt=""
+                aria-hidden="true"
+              />
               <div>
                 <h2>Mengalami Kendala Teknis?</h2>
                 <p>Tim dukungan kami siap membantu Anda selama jam kerja (08:00 - 16:00).</p>
@@ -494,11 +524,21 @@ export const SurveyDetail = ({
 
             <div>
               <a href="mailto:support@jogjakota.go.id">
-                <img src={emailIcon} alt="" aria-hidden="true" />
+                <img
+                  className="survey-detail-contact__icon survey-detail-contact__icon--email"
+                  src={emailIcon}
+                  alt=""
+                  aria-hidden="true"
+                />
                 support@jogjakota.go.id
               </a>
               <a href="tel:+62274123456">
-                <img src={phoneIcon} alt="" aria-hidden="true" />
+                <img
+                  className="survey-detail-contact__icon survey-detail-contact__icon--phone"
+                  src={phoneIcon}
+                  alt=""
+                  aria-hidden="true"
+                />
                 (0274) 123456
               </a>
             </div>
