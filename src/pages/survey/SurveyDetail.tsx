@@ -26,6 +26,7 @@ type SurveyDetailProps = {
   onOpenManageSurveys?: () => void;
   onOpenProfile?: () => void;
   onOpenSurveyList?: () => void;
+  onStartSurvey?: (surveyId: number | string) => void;
   onUnauthorized?: () => void;
   surveyId: number | null;
 };
@@ -208,6 +209,7 @@ export const SurveyDetail = ({
   onOpenManageSurveys,
   onOpenProfile,
   onOpenSurveyList,
+  onStartSurvey,
   onUnauthorized,
   surveyId,
 }: SurveyDetailProps) => {
@@ -352,7 +354,7 @@ export const SurveyDetail = ({
         throw new Error(result.message ?? "Form survey belum bisa dibuka.");
       }
 
-      setFeedbackMessage("Form survey siap dibuka.");
+      onStartSurvey?.(surveyId);
     } catch (error) {
       setFeedbackMessage(
         error instanceof Error ? error.message : "Form survey belum bisa dibuka.",

@@ -9,7 +9,9 @@ import { ChangePassword } from "./pages/profile/ChangePassword";
 import { Profile } from "./pages/profile/Profile";
 import { CreateSurvey } from "./pages/survey/CreateSurvey";
 import { ManageSurveys } from "./pages/survey/ManageSurveys";
+import { SurveyComplete } from "./pages/survey/SurveyComplete";
 import { SurveyDetail } from "./pages/survey/SurveyDetail";
+import { SurveyFill } from "./pages/survey/SurveyFill";
 import { SurveyList } from "./pages/survey/SurveyList";
 import { API_BASE_URL } from "./lib/api";
 
@@ -24,11 +26,14 @@ type AuthPage =
   | "profile"
   | "register"
   | "reset-password"
+  | "survey-complete"
   | "survey-detail"
+  | "survey-fill"
   | "survey-list";
 
 const AUTH_SESSION_KEY = "survey_auth_session";
 const AUTH_TOKEN_KEY = "survey_auth_token";
+const SURVEY_COMPLETION_SESSION_PREFIX = "survey_completion_";
 
 type AccountProfile = {
   full_name?: string | null;
@@ -38,6 +43,12 @@ type AccountProfile = {
 
 type ProfileApiResult = {
   data?: AccountProfile;
+};
+
+type SurveyCompletionPayload = {
+  submittedAt: string;
+  surveyId: number;
+  title: string;
 };
 
 const PAGE_PATHS: Record<AuthPage, string> = {
@@ -51,12 +62,16 @@ const PAGE_PATHS: Record<AuthPage, string> = {
   profile: "/profile",
   register: "/register",
   "reset-password": "/reset-password",
+  "survey-complete": "/surveys",
   "survey-detail": "/surveys",
+  "survey-fill": "/surveys",
   "survey-list": "/surveys",
 };
 
 const CREATE_SURVEY_BASE_PATH = "/surveys/create";
 const EDIT_SURVEY_PATH_PATTERN = /^\/surveys\/edit\/(\d+)(?:\/.*)?$/;
+const SURVEY_COMPLETE_PATH_PATTERN = /^\/surveys\/(\d+)\/complete$/;
+const SURVEY_FILL_PATH_PATTERN = /^\/surveys\/(\d+)\/fill$/;
 const SURVEY_DETAIL_PATH_PATTERN = /^\/surveys\/(\d+)$/;
 
 const isCreateSurveyPath = (path: string) =>
@@ -70,6 +85,24 @@ const getEditSurveyIdFromPath = (path = window.location.pathname) => {
 };
 
 const isEditSurveyPath = (path: string) => getEditSurveyIdFromPath(path) !== null;
+
+const getSurveyCompleteIdFromPath = (path = window.location.pathname) => {
+  const [, surveyId] = path.match(SURVEY_COMPLETE_PATH_PATTERN) ?? [];
+  const parsedSurveyId = Number(surveyId);
+  return Number.isFinite(parsedSurveyId) ? parsedSurveyId : null;
+};
+
+const isSurveyCompletePath = (path: string) =>
+  getSurveyCompleteIdFromPath(path) !== null;
+
+const getSurveyFillIdFromPath = (path = window.location.pathname) => {
+  const [, surveyId] = path.match(SURVEY_FILL_PATH_PATTERN) ?? [];
+  const parsedSurveyId = Number(surveyId);
+  return Number.isFinite(parsedSurveyId) ? parsedSurveyId : null;
+};
+
+const isSurveyFillPath = (path: string) =>
+  getSurveyFillIdFromPath(path) !== null;
 
 const getSurveyDetailIdFromPath = (path = window.location.pathname) => {
   const [, surveyId] = path.match(SURVEY_DETAIL_PATH_PATTERN) ?? [];
@@ -111,6 +144,8 @@ const getInitialAuthPage = (): AuthPage => {
       normalizedPath === PAGE_PATHS["change-password"] ||
       isCreateSurveyPath(normalizedPath) ||
       isEditSurveyPath(normalizedPath) ||
+      isSurveyCompletePath(normalizedPath) ||
+      isSurveyFillPath(normalizedPath) ||
       normalizedPath === PAGE_PATHS["manage-surveys"]) &&
     !hasStoredAuth()
   ) {
@@ -131,6 +166,14 @@ const getInitialAuthPage = (): AuthPage => {
 
   if (isEditSurveyPath(normalizedPath)) {
     return "edit-survey";
+  }
+
+  if (isSurveyCompletePath(normalizedPath)) {
+    return "survey-complete";
+  }
+
+  if (isSurveyFillPath(normalizedPath)) {
+    return "survey-fill";
   }
 
   if (normalizedPath === PAGE_PATHS["manage-surveys"]) {
@@ -188,6 +231,20 @@ const syncUrl = (page: AuthPage, replace = false) => {
     return;
   }
 
+  if (
+    page === "survey-complete" &&
+    isSurveyCompletePath(url.pathname.replace(/\/+$/, ""))
+  ) {
+    return;
+  }
+
+  if (
+    page === "survey-fill" &&
+    isSurveyFillPath(url.pathname.replace(/\/+$/, ""))
+  ) {
+    return;
+  }
+
   url.pathname = PAGE_PATHS[page];
 
   if (page !== "reset-password") {
@@ -228,6 +285,12 @@ function App() {
   const [surveyDetailId, setSurveyDetailId] = useState<number | null>(() =>
     getSurveyDetailIdFromPath(),
   );
+  const [surveyCompleteId, setSurveyCompleteId] = useState<number | null>(() =>
+    getSurveyCompleteIdFromPath(),
+  );
+  const [surveyFillId, setSurveyFillId] = useState<number | null>(() =>
+    getSurveyFillIdFromPath(),
+  );
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(
     null,
   );
@@ -240,7 +303,9 @@ function App() {
       const nextResetToken = getResetToken();
       setResetToken(nextResetToken);
       setEditSurveyId(getEditSurveyIdFromPath());
+      setSurveyCompleteId(getSurveyCompleteIdFromPath());
       setSurveyDetailId(getSurveyDetailIdFromPath());
+      setSurveyFillId(getSurveyFillIdFromPath());
       setAuthPage(getInitialAuthPage());
     };
 
@@ -259,6 +324,14 @@ function App() {
 
     if (page !== "survey-detail") {
       setSurveyDetailId(null);
+    }
+
+    if (page !== "survey-complete") {
+      setSurveyCompleteId(null);
+    }
+
+    if (page !== "survey-fill") {
+      setSurveyFillId(null);
     }
 
     setAuthPage(page);
@@ -402,6 +475,52 @@ function App() {
     setAuthPage("survey-detail");
   }, []);
 
+  const openSurveyFill = useCallback(
+    (surveyId: number | string) => {
+      if (!isAuthenticated) {
+        goToLogin();
+        return;
+      }
+
+      const parsedSurveyId = Number(surveyId);
+
+      if (!Number.isFinite(parsedSurveyId)) {
+        return;
+      }
+
+      const url = new URL(window.location.href);
+      url.pathname = `/surveys/${parsedSurveyId}/fill`;
+      url.search = "";
+      url.hash = "";
+      window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      setSurveyFillId(parsedSurveyId);
+      setSurveyDetailId(null);
+      setResetToken(null);
+      setAuthPage("survey-fill");
+    },
+    [goToLogin, isAuthenticated],
+  );
+
+  const openSurveyComplete = useCallback(
+    ({ submittedAt, surveyId, title }: SurveyCompletionPayload) => {
+      const url = new URL(window.location.href);
+      url.pathname = `/surveys/${surveyId}/complete`;
+      url.search = "";
+      url.hash = "";
+      sessionStorage.setItem(
+        `${SURVEY_COMPLETION_SESSION_PREFIX}${surveyId}`,
+        JSON.stringify({ submittedAt, title }),
+      );
+      window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      setSurveyCompleteId(surveyId);
+      setSurveyDetailId(null);
+      setSurveyFillId(null);
+      setResetToken(null);
+      setAuthPage("survey-complete");
+    },
+    [],
+  );
+
   const openCreateSurvey = useCallback(() => {
     if (isAuthenticated) {
       navigate("create-survey");
@@ -528,8 +647,45 @@ function App() {
         onOpenManageSurveys={openManageSurveys}
         onOpenProfile={openProfile}
         onOpenSurveyList={openSurveyList}
+        onStartSurvey={openSurveyFill}
         onUnauthorized={handleUnauthorized}
         surveyId={surveyDetailId}
+      />,
+    );
+  }
+
+  if (authPage === "survey-fill") {
+    return withLogoutDialog(
+      <SurveyFill
+        accountDescription={accountDescription}
+        accountName={accountName}
+        isAuthenticated={isAuthenticated}
+        onAuthAction={handleAuthAction}
+        onBackHome={openHome}
+        onCompleteSurvey={openSurveyComplete}
+        onOpenManageSurveys={openManageSurveys}
+        onOpenProfile={openProfile}
+        onOpenSurveyList={openSurveyList}
+        onUnauthorized={handleUnauthorized}
+        surveyId={surveyFillId}
+      />,
+    );
+  }
+
+  if (authPage === "survey-complete") {
+    return withLogoutDialog(
+      <SurveyComplete
+        key={surveyCompleteId ?? "survey-complete"}
+        accountDescription={accountDescription}
+        accountName={accountName}
+        isAuthenticated={isAuthenticated}
+        onAuthAction={handleAuthAction}
+        onBackHome={openHome}
+        onOpenManageSurveys={openManageSurveys}
+        onOpenProfile={openProfile}
+        onOpenSurveyList={openSurveyList}
+        onUnauthorized={handleUnauthorized}
+        surveyId={surveyCompleteId}
       />,
     );
   }
