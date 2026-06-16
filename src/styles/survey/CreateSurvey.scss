@@ -591,6 +591,12 @@
   font-size: 24px !important;
   line-height: 24px !important;
   padding: 8px !important;
+
+  img {
+    display: block;
+    height: 14px;
+    width: 14px;
+  }
 }
 
 .create-question-title-row {
@@ -774,6 +780,22 @@
   }
 }
 
+.create-question-card--nested {
+  background: #ffffff;
+  border-left-color: var(--create-border);
+  box-shadow: none;
+  padding: 16px;
+
+  .create-question-grid {
+    gap: 16px;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  }
+
+  .create-survey-field textarea {
+    min-height: 78px;
+  }
+}
+
 .create-question-grid {
   grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
 
@@ -834,14 +856,19 @@
     line-height: 20px;
   }
 
-  div {
+  .create-question-option {
+    display: grid;
+    gap: 8px;
+  }
+
+  .create-question-option__input {
     align-items: center;
     display: grid;
     gap: 8px;
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
-  input {
+  .create-question-option__input input {
     background: #ffffff;
     border: 1px solid var(--create-soft-muted);
     border-radius: 8px;
@@ -859,6 +886,53 @@
       border-color: var(--create-maroon);
       box-shadow: 0 0 0 2px rgba(128, 0, 0, 0.12);
     }
+  }
+}
+
+.create-question-conditional {
+  background: var(--create-sidebar);
+  border: 1px solid var(--create-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  margin-left: 24px;
+  padding: 12px;
+}
+
+.create-question-conditional__item {
+  display: grid;
+  gap: 8px;
+
+  > span {
+    color: var(--create-soft-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.55px;
+    line-height: 16px;
+    text-transform: uppercase;
+  }
+}
+
+.create-question-conditional__add {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--create-maroon-deep);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  justify-self: start;
+  line-height: 16px;
+  padding: 0;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--create-maroon);
+    outline: none;
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 }
 
@@ -1066,7 +1140,7 @@
 
 .create-survey-footer > button,
 .create-survey-footer > div button:first-child,
-.create-question-options div button {
+.create-question-option__delete {
   align-items: center;
   background: #ffffff;
   border: 1px solid var(--create-maroon-dark);
@@ -1103,7 +1177,7 @@
   color: var(--create-muted);
 }
 
-.create-question-options div button {
+.create-question-option__delete {
   border-color: var(--create-border);
   border-radius: 8px;
   color: var(--create-muted);
@@ -1229,7 +1303,15 @@
     flex-direction: row;
   }
 
-  .create-question-options div {
+  .create-question-card--nested .create-question-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .create-question-conditional {
+    margin-left: 0;
+  }
+
+  .create-question-option__input {
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
