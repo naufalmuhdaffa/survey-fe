@@ -164,43 +164,62 @@
   background: #ffffff;
   border: 1px solid rgba(226, 191, 185, 0.4);
   border-radius: 12px;
+  box-sizing: border-box;
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
-  height: 516px;
+  height: 100%;
+  min-height: 516px;
+  min-width: 0;
   padding: 1px 25px 25px;
 
   h3 {
     color: var(--home-ink);
+    display: -webkit-box;
+    flex: 0 0 56px;
     font-family:
       "Public Sans",
       Inter,
       sans-serif;
     font-size: 20px;
     font-weight: 600;
+    height: 56px;
     line-height: 28px;
     margin: 0 0 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   > p {
     color: var(--home-muted);
+    display: -webkit-box;
     flex: 0 0 72px;
     font-size: 16px;
     height: 72px;
     line-height: 24px;
     margin: 0 0 24px;
     overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
   }
 
   dl {
     display: grid;
     gap: 3.5px;
+    height: 36px;
     margin: 0 0 24px;
+    overflow: hidden;
   }
 
   dl > div {
     display: flex;
     gap: 6px;
+    min-width: 0;
   }
 
   dt,
@@ -212,7 +231,16 @@
   }
 
   dt {
+    flex: 0 0 auto;
     font-weight: 600;
+  }
+
+  dd {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   button {
@@ -248,6 +276,7 @@
 
 .home-survey-card__image {
   border-radius: 12px 12px 0 0;
+  flex: 0 0 170px;
   height: 170px;
   margin: 16px 0;
   object-fit: cover;
@@ -259,6 +288,7 @@
   background: rgba(43, 105, 84, 0.1);
   border-radius: 12px;
   color: #2b6954;
+  flex: 0 0 auto;
   font-size: 12px;
   font-weight: 600;
   line-height: 16px;

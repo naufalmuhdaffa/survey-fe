@@ -22,6 +22,7 @@ type HomeProps = {
   onAuthAction?: () => void;
   onOpenManageSurveys?: () => void;
   onOpenProfile?: () => void;
+  onOpenSurveyDetail?: (surveyId: number | string) => void;
   onOpenSurveyList?: () => void;
 };
 
@@ -231,6 +232,7 @@ export const Home = ({
   onAuthAction,
   onOpenManageSurveys,
   onOpenProfile,
+  onOpenSurveyDetail,
   onOpenSurveyList,
 }: HomeProps) => {
   const [surveys, setSurveys] = useState<SurveyCard[]>([]);
@@ -397,7 +399,10 @@ export const Home = ({
                     </div>
                   </dl>
 
-                  <button type="button">
+                  <button
+                    onClick={() => onOpenSurveyDetail?.(survey.id)}
+                    type="button"
+                  >
                     <span>Isi Survey</span>
                     <img src={cardArrowIcon} alt="" aria-hidden="true" />
                   </button>

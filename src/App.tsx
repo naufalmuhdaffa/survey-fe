@@ -494,6 +494,7 @@ function App() {
         onAuthAction={handleAuthAction}
         onOpenManageSurveys={openManageSurveys}
         onOpenProfile={openProfile}
+        onOpenSurveyDetail={openSurveyDetail}
         onOpenSurveyList={openSurveyList}
       />,
     );
