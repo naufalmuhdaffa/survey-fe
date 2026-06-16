@@ -7,6 +7,7 @@
   --survey-fill-muted: #57423e;
   --survey-fill-border: #e2bfb9;
   --survey-fill-blue-soft: #e5eeff;
+  --survey-fill-track: #e5e7eb;
   --survey-fill-canvas: #f8f9ff;
   --survey-fill-error: #ba1a1a;
 
@@ -144,7 +145,7 @@
 
   button {
     align-items: center;
-    background: var(--survey-fill-blue-soft);
+    background: var(--survey-fill-track);
     border: 0;
     border-radius: 9999px;
     cursor: pointer;
@@ -162,8 +163,7 @@
       width: 10px;
     }
 
-    &.is-complete,
-    &.is-current {
+    &.is-complete {
       background: var(--survey-fill-maroon);
     }
 
@@ -172,7 +172,7 @@
     }
 
     &.is-locked {
-      background: var(--survey-fill-blue-soft);
+      background: var(--survey-fill-track);
     }
 
     &:disabled {
