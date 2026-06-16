@@ -30,6 +30,7 @@ const AUTH_TOKEN_KEY = "survey_auth_token";
 
 type AccountProfile = {
   full_name?: string | null;
+  position?: string | null;
   username?: string | null;
 };
 
@@ -459,6 +460,7 @@ function App() {
         onBackHome={openHome}
         onOpenManageSurveys={openManageSurveys}
         onOpenProfile={openProfile}
+        accountPosition={accountProfile?.position}
         onUnauthorized={handleUnauthorized}
       />,
     );

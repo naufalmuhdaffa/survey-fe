@@ -2,20 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { Sidebar } from "../../components/sidebar";
 import { Topbar } from "../../components/topbar";
 import adminAvatar from "../../assets/home/home-admin-avatar.png";
-import cardArrowIcon from "../../assets/home/home-card-arrow.svg";
 import surveyIllustration from "../../assets/home/home-survey-illustration.png";
 import transJogjaBus from "../../assets/home/home-trans-jogja-bus.png";
-import limitIcon from "../../assets/survey/manage-limit-icon.svg";
-import searchIcon from "../../assets/survey/manage-search-icon.svg";
+import arrowRightIcon from "../../assets/survey/list/list-arrow-right.svg";
+import filterIcon from "../../assets/survey/list/list-filter-icon.svg";
+import lockIcon from "../../assets/survey/list/list-lock-icon.svg";
+import paginationNextIcon from "../../assets/survey/list/list-pagination-next.svg";
+import paginationPrevIcon from "../../assets/survey/list/list-pagination-prev.svg";
+import searchIcon from "../../assets/survey/list/list-search-icon.svg";
 import { API_BASE_URL } from "../../lib/api";
 import "../../styles/survey/SurveyList.scss";
 
 const AUTH_TOKEN_KEY = "survey_auth_token";
-const SURVEYS_PER_PAGE = 3;
+const PER_PAGE_OPTIONS = [3, 6, 9, 12] as const;
 
 type SurveyListProps = {
   accountDescription?: string;
   accountName?: string;
+  accountPosition?: string | null;
   isAuthenticated: boolean;
   onAuthAction?: () => void;
   onBackHome?: () => void;
@@ -64,6 +68,12 @@ const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   open: "Open",
   upcoming: "Upcoming",
+};
+
+const ACCESS_DENIED_LABELS: Record<string, string> = {
+  asn: "Pegawai ASN",
+  non_asn: "Pegawai Non-ASN",
+  public: "Masyarakat Umum",
 };
 
 const fallbackSurveys: SurveyCard[] = [
@@ -220,6 +230,33 @@ const getEndDateLabel = (closesAt?: string | null) => {
 
 const getStatusLabel = (status: string) => STATUS_LABELS[status] ?? status;
 
+const normalizeAccountPosition = (position?: string | null) => {
+  const normalizedPosition = position?.trim().toLowerCase();
+
+  return normalizedPosition === "asn" ||
+    normalizedPosition === "non_asn" ||
+    normalizedPosition === "public"
+    ? normalizedPosition
+    : null;
+};
+
+const canUseAudienceFilter = (
+  selectedPosition: string,
+  accountPosition?: string | null,
+) => {
+  if (selectedPosition === "" || selectedPosition === "public") {
+    return true;
+  }
+
+  const normalizedAccountPosition = normalizeAccountPosition(accountPosition);
+
+  if (!normalizedAccountPosition) {
+    return true;
+  }
+
+  return normalizedAccountPosition === selectedPosition;
+};
+
 const getVisiblePageNumbers = (currentPage: number, totalPages: number) => {
   const pages = new Set([1, currentPage]);
 
@@ -267,6 +304,7 @@ const SurveyListSkeleton = () => (
 export const SurveyList = ({
   accountDescription,
   accountName,
+  accountPosition,
   isAuthenticated,
   onAuthAction,
   onBackHome,
@@ -280,9 +318,12 @@ export const SurveyList = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [positionFilter, setPositionFilter] = useState("");
+  const [perPage, setPerPage] = useState<(typeof PER_PAGE_OPTIONS)[number]>(3);
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadError, setHasLoadError] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [isLimitOpen, setIsLimitOpen] = useState(false);
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
@@ -294,11 +335,24 @@ export const SurveyList = ({
   }, [searchInput]);
 
   useEffect(() => {
+    if (!feedbackMessage) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setFeedbackMessage("");
+    }, 4200);
+
+    return () => window.clearTimeout(timerId);
+  }, [feedbackMessage]);
+
+  useEffect(() => {
     const controller = new AbortController();
 
     const fetchSurveys = async () => {
       setIsLoading(true);
       setFeedbackMessage("");
+      setHasLoadError(false);
 
       try {
         const response = await fetch(`${API_BASE_URL}/surveys`, {
@@ -323,12 +377,14 @@ export const SurveyList = ({
           .filter((survey) => survey.status !== "closed");
 
         setSurveys(nextSurveys);
+        setHasLoadError(false);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
 
         setSurveys([]);
+        setHasLoadError(true);
         setFeedbackMessage(
           error instanceof Error
             ? error.message
@@ -347,7 +403,7 @@ export const SurveyList = ({
   }, [onUnauthorized]);
 
   const filteredSurveys = useMemo(() => {
-    const source = surveys.length > 0 ? surveys : fallbackSurveys;
+    const source = hasLoadError ? fallbackSurveys : surveys;
 
     return source.filter((survey) => {
       const matchesSearch =
@@ -363,16 +419,16 @@ export const SurveyList = ({
         matchesPosition(survey, positionFilter)
       );
     });
-  }, [positionFilter, searchQuery, statusFilter, surveys]);
+  }, [hasLoadError, positionFilter, searchQuery, statusFilter, surveys]);
 
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredSurveys.length / SURVEYS_PER_PAGE),
+    Math.ceil(filteredSurveys.length / perPage),
   );
   const currentPage = Math.min(page, totalPages);
   const visibleSurveys = filteredSurveys.slice(
-    (currentPage - 1) * SURVEYS_PER_PAGE,
-    currentPage * SURVEYS_PER_PAGE,
+    (currentPage - 1) * perPage,
+    currentPage * perPage,
   );
 
   const closeSidebar = () => {
@@ -405,12 +461,22 @@ export const SurveyList = ({
     onAuthAction?.();
   };
 
-  const resetFilters = () => {
-    setSearchInput("");
-    setSearchQuery("");
-    setStatusFilter("");
-    setPositionFilter("");
+  const handleAudienceChange = (nextPosition: string) => {
+    if (!canUseAudienceFilter(nextPosition, accountPosition)) {
+      setFeedbackMessage(
+        `Akun ${ACCESS_DENIED_LABELS[normalizeAccountPosition(accountPosition) ?? "public"]} tidak dapat melihat filter ${POSITION_LABELS[nextPosition] ?? nextPosition}.`,
+      );
+      return;
+    }
+
+    setPositionFilter(nextPosition);
     setPage(1);
+  };
+
+  const handlePerPageChange = (nextPerPage: (typeof PER_PAGE_OPTIONS)[number]) => {
+    setPerPage(nextPerPage);
+    setPage(1);
+    setIsLimitOpen(false);
   };
 
   const handleStartSurvey = async (survey: SurveyCard) => {
@@ -490,16 +556,13 @@ export const SurveyList = ({
 
             <div className="survey-list-filter-controls">
               <label>
-                <span>Kategori</span>
+                <span>Audiens</span>
                 <select
-                  aria-label="Filter kategori"
-                  onChange={(event) => {
-                    setPositionFilter(event.target.value);
-                    setPage(1);
-                  }}
+                  aria-label="Filter audiens"
+                  onChange={(event) => handleAudienceChange(event.target.value)}
                   value={positionFilter}
                 >
-                  <option value="">Kategori</option>
+                  <option value="">Audiens</option>
                   <option value="public">Masyarakat Umum</option>
                   <option value="asn">Pegawai ASN</option>
                   <option value="non_asn">Pegawai Non-ASN</option>
@@ -523,13 +586,34 @@ export const SurveyList = ({
                 </select>
               </label>
 
-              <button
-                aria-label="Reset filter survey"
-                onClick={resetFilters}
-                type="button"
-              >
-                <img src={limitIcon} alt="" aria-hidden="true" />
-              </button>
+              <div className="survey-list-limit">
+                <button
+                  aria-expanded={isLimitOpen}
+                  aria-haspopup="listbox"
+                  aria-label={`Pilih jumlah data per halaman, saat ini ${perPage}`}
+                  onClick={() => setIsLimitOpen((current) => !current)}
+                  type="button"
+                >
+                  <img src={filterIcon} alt="" aria-hidden="true" />
+                </button>
+
+                {isLimitOpen && (
+                  <div className="survey-list-limit__menu" role="listbox">
+                    {PER_PAGE_OPTIONS.map((option) => (
+                      <button
+                        aria-selected={option === perPage}
+                        className={option === perPage ? "is-selected" : ""}
+                        key={option}
+                        onClick={() => handlePerPageChange(option)}
+                        role="option"
+                        type="button"
+                      >
+                        {option} data
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </section>
 
@@ -559,7 +643,7 @@ export const SurveyList = ({
                     <span
                       className={`survey-list-status survey-list-status--${survey.status}`}
                     >
-                      <span aria-hidden="true" />
+                      <img src={lockIcon} alt="" aria-hidden="true" />
                       {getStatusLabel(survey.status)}
                     </span>
 
@@ -585,7 +669,7 @@ export const SurveyList = ({
                         type="button"
                       >
                         {survey.status === "open" ? "Mulai Survei" : "Belum Aktif"}
-                        <img src={cardArrowIcon} alt="" aria-hidden="true" />
+                        <img src={arrowRightIcon} alt="" aria-hidden="true" />
                       </button>
                     </div>
                   </div>
@@ -606,7 +690,7 @@ export const SurveyList = ({
               onClick={() => setPage((value) => Math.max(1, value - 1))}
               type="button"
             >
-              {"<"}
+              <img src={paginationPrevIcon} alt="" aria-hidden="true" />
             </button>
 
             {getVisiblePageNumbers(currentPage, totalPages).map((pageNumber) => (
@@ -629,7 +713,7 @@ export const SurveyList = ({
               onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
               type="button"
             >
-              {">"}
+              <img src={paginationNextIcon} alt="" aria-hidden="true" />
             </button>
           </nav>
 
