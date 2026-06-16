@@ -135,6 +135,24 @@
     color: var(--create-maroon-deep);
     font-weight: 700;
   }
+
+  button {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    letter-spacing: 0;
+    padding: 0;
+
+    &:hover,
+    &:focus-visible {
+      color: var(--create-maroon);
+      outline: none;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+  }
 }
 
 .create-survey-steps {

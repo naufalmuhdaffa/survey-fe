@@ -1652,6 +1652,12 @@ export const CreateSurvey = ({
         await persistDraftQuestions(targetSurveyId);
       }
 
+      if (isEditingSurvey) {
+        localStorage.removeItem(draftStorageKey);
+        onOpenManageSurveys?.();
+        return;
+      }
+
       setFeedback({
         message: "Draft survey berhasil disimpan.",
         type: "success",
@@ -1667,9 +1673,18 @@ export const CreateSurvey = ({
     }
   };
 
-  const leaveBuilder = async () => {
-    if (surveyInfo.title.trim() === "") {
+  const leaveBuilder = async (destination: "home" | "manage" = "manage") => {
+    const navigateAway = () => {
+      if (destination === "home") {
+        onBackHome?.();
+        return;
+      }
+
       onOpenManageSurveys?.();
+    };
+
+    if (surveyInfo.title.trim() === "") {
+      navigateAway();
       return;
     }
 
@@ -1694,7 +1709,7 @@ export const CreateSurvey = ({
       return;
     }
 
-    onOpenManageSurveys?.();
+    navigateAway();
   };
 
   const requestPublishSurvey = () => {
@@ -2304,9 +2319,13 @@ export const CreateSurvey = ({
 
     return (
       <div className="create-survey-breadcrumbs" aria-label="Breadcrumb">
-        <span>Beranda</span>
+        <button onClick={() => void leaveBuilder("home")} type="button">
+          Beranda
+        </button>
         <span aria-hidden="true">{">"}</span>
-        <span>Kelola Survey</span>
+        <button onClick={() => void leaveBuilder("manage")} type="button">
+          Kelola Survey
+        </button>
         <span aria-hidden="true">{">"}</span>
         <strong>{pageTitle}</strong>
       </div>
